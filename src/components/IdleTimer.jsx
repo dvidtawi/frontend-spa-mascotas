@@ -1,17 +1,17 @@
-import { useEffect } from "react";
-import { useAuth } from "../auth/AuthContext";
+import {
+  useEffect
+} from "react";
 
-const FIVE_MINUTES =
-  5 * 60 * 1000;
+import {
+  useAuth
+} from "../auth/AuthContext";
 
 export default function IdleTimer() {
 
-  const { logout, user } =
+  const { logout } =
     useAuth();
 
   useEffect(() => {
-
-    if (!user) return;
 
     let timeout;
 
@@ -21,13 +21,9 @@ export default function IdleTimer() {
 
       timeout = setTimeout(() => {
 
-        alert(
-          "Sesión cerrada por inactividad"
-        );
-
         logout();
 
-      }, FIVE_MINUTES);
+      }, 5 * 60 * 1000);
     };
 
     window.addEventListener(
@@ -57,7 +53,7 @@ export default function IdleTimer() {
       );
     };
 
-  }, [user]);
+  }, []);
 
   return null;
 }

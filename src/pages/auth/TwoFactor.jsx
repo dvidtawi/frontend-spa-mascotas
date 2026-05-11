@@ -4,13 +4,24 @@ import {
 
 import { useNavigate } from 'react-router-dom';
 
+import { useEffect, useState } from 'react';
+
 import toast from 'react-hot-toast';
 
 import { useAuth } from '../../auth/AuthContext';
+import { getUserFromToken } from '../../utils/token';
 
 const TwoFactor = ({
   credentials
 }) => {
+
+  const [errorMessage, setErrorMessage] = useState("");
+
+  useEffect(() => {
+    console.log('TwoFactor mounted', credentials);
+  }, [credentials]);
+
+  console.log('TwoFactor rendered', credentials);
 
   const navigate = useNavigate();
 
@@ -22,6 +33,18 @@ const TwoFactor = ({
   } = useForm();
 
   const onSubmit = async (data) => {
+    setErrorMessage("");
+
+    console.log('onSubmit called', data);
+
+    if (!data.twoFactorCode) {
+      const message = 'Ingresa el código 2FA';
+      setErrorMessage(message);
+      toast.error(message);
+      return;
+    }
+
+    console.log('Submitting 2FA', data);
 
     try {
 
@@ -34,17 +57,50 @@ const TwoFactor = ({
             data.twoFactorCode
         });
 
-      toast.success(
-        '2FA correcto'
-      );
+      console.log('2FA response', response);
 
-      navigate('/admin');
+      toast.success('2FA correcto');
+
+      const decoded = getUserFromToken();
+
+      if (response.primer_inicio) {
+        if (decoded?.rol === 1) {
+          navigate('/admin/setup-2fa');
+          return;
+        }
+
+        navigate('/change-password');
+        return;
+      }
+
+      switch (decoded?.rol) {
+        case 1:
+          navigate('/admin');
+          break;
+        case 2:
+          navigate('/groomer');
+          break;
+        case 3:
+          navigate('/recepcion');
+          break;
+        case 4:
+          navigate('/cliente');
+          break;
+        default:
+          console.log('Decoded rol after 2FA:', decoded?.rol);
+          navigate('/login');
+      }
 
     } catch (err) {
+      const message =
+        err.response?.data?.message ||
+        (err.response?.status === 401
+          ? 'Código 2FA inválido'
+          : 'Error de verificación 2FA');
 
-      toast.error(
-        err.response?.data?.message
-      );
+      console.log('2FA error', err);
+      setErrorMessage(message);
+      toast.error(message);
     }
   };
 
@@ -102,6 +158,7 @@ const TwoFactor = ({
           />
 
           <button
+            type="submit"
             className="
             w-full
             bg-green-600
@@ -112,6 +169,12 @@ const TwoFactor = ({
           >
             Verificar
           </button>
+
+          {errorMessage && (
+            <p className="text-red-600 text-sm text-center">
+              {errorMessage}
+            </p>
+          )}
 
         </form>
 

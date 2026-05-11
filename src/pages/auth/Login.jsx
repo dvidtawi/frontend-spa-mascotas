@@ -13,6 +13,7 @@ import { FaLock } from 'react-icons/fa';
 import { useAuth } from '../../auth/AuthContext';
 
 import TwoFactor from './TwoFactor';
+import { getUserFromToken } from '../../utils/token';
 
 const Login = () => {
 
@@ -34,73 +35,73 @@ const Login = () => {
     handleSubmit
   } = useForm();
 
+  const [errorMessage, setErrorMessage] = useState("");
+
   const onSubmit = async (data) => {
+    setErrorMessage("");
 
     try {
-
       setLoading(true);
 
-      const response =
-        await login(data);
+      const response = await login(data);
 
-      if (
-        response.user.rol === 1
-      ) {
-
-        navigate('/admin');
-      }
-
-      else if (
-        response.user.rol === 2
-      ) {
-
-        navigate('/groomer');
-      }
-
-      else if (
-        response.user.rol === 3
-      ) {
-
-        navigate('/recepcion');
-      }
-
-      else {
-
-        navigate('/cliente');
-      }
-
-      if (
-        response.primer_inicio
-      ) {
-
-        navigate('/change-password');
-      }
-
-      toast.success(
-        'Login exitoso'
-      );
-
-    } catch (err) {
-
-      if (
-        err.response?.data
-          ?.requires2FA
-      ) {
-
+      if (response.requires2FA) {
+        console.log('Requires 2FA, credentials:', data);
         setCredentials(data);
-
         setShow2FA(true);
-
         return;
       }
 
-      toast.error(
+      const decoded = getUserFromToken();
+
+      if (response.primer_inicio) {
+        if (decoded?.rol === 1) {
+          navigate('/admin/setup-2fa');
+          toast.success('Debes activar 2FA antes de continuar');
+          return;
+        }
+
+        navigate('/change-password');
+        toast.success('Debes cambiar tu contraseña');
+        return;
+      }
+
+      switch (decoded?.rol) {
+        case 1:
+          navigate('/admin');
+          break;
+        case 2:
+          navigate('/groomer');
+          break;
+        case 3:
+          navigate('/recepcion');
+          break;
+        case 4:
+          navigate('/cliente');
+          break;
+        default:
+          console.log('Decoded rol:', decoded?.rol);
+          navigate('/login');
+      }
+
+      toast.success('Login exitoso');
+    } catch (err) {
+      if (err.response?.data?.requires2FA) {
+        setCredentials(data);
+        setShow2FA(true);
+        return;
+      }
+
+      const message =
         err.response?.data?.message ||
-        'Error login'
-      );
+        (err.response?.status === 400 ||
+        err.response?.status === 401
+          ? 'Credenciales inválidas'
+          : 'Error de login');
 
+      setErrorMessage(message);
+      toast.error(message);
     } finally {
-
       setLoading(false);
     }
   };
@@ -189,6 +190,7 @@ const Login = () => {
           />
 
           <button
+            type="submit"
             disabled={loading}
             className="
             w-full
@@ -209,6 +211,37 @@ const Login = () => {
 
           </button>
 
+          {errorMessage && (
+            <p className="text-red-600 text-sm text-center">
+              {errorMessage}
+            </p>
+          )}
+
+          <div className="text-center mt-4">
+
+            <a
+                href="/forgot-password"
+                className="
+                text-blue-600
+                hover:underline
+                "
+            >
+                ¿Olvidaste tu contraseña?
+            </a>
+
+            <br />
+
+            <a
+                href="/register"
+                className="
+                text-blue-600
+                hover:underline
+                "
+            >
+                ¿No tienes una cuenta? Regístrate
+            </a>
+
+        </div>  
         </form>
 
       </div>

@@ -8,7 +8,7 @@ export default function RoleRoute({
 
   const { user } = useAuth();
 
-  if (!roles.includes(user?.rol)) {
+  if (!user || !roles.includes(user.rol)) {
     return <Navigate to="/login" />;
   }
 
