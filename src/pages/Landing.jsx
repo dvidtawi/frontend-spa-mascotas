@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
 import { Navigate } from 'react-router-dom';
+import Navbar from '../components/Navbar';
 
 const Landing = () => {
   const { user } = useAuth();
@@ -22,21 +23,22 @@ const Landing = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
-      <div className="max-w-md w-full bg-white rounded-lg shadow-lg p-8">
-        <div className="text-center">
-          <h1 className="text-4xl font-bold text-gray-900 mb-4">PetSpa de Mascotas</h1>
-          <p className="text-gray-600 mb-8">Bienvenido a nuestro servicio de spa para mascotas. Inicia sesión o regístrate para acceder a nuestros servicios.</p>
-          <div className="space-y-4">
+    <div className="min-h-screen bg-gray-100">
+      <Navbar />
+      <div className="max-w-5xl mx-auto px-4 py-10">
+        <div className="bg-white rounded-3xl shadow-xl p-10">
+          <h1 className="text-5xl font-bold text-blue-600 mb-4">Bienvenido a PetSpa Mascotas</h1>
+          <p className="text-gray-600 text-lg mb-8">Explora nuestros servicios y accede con tu cuenta para gestionar tus mascotas y citas.</p>
+          <div className="grid gap-6 md:grid-cols-2">
             <Link
               to="/login"
-              className="w-full bg-blue-600 text-white py-3 px-4 rounded-md hover:bg-blue-700 transition duration-200 block text-center"
+              className="block bg-blue-600 text-white py-4 rounded-xl text-center font-semibold hover:bg-blue-700 transition"
             >
               Iniciar Sesión
             </Link>
             <Link
               to="/register"
-              className="w-full bg-green-600 text-white py-3 px-4 rounded-md hover:bg-green-700 transition duration-200 block text-center"
+              className="block bg-green-600 text-white py-4 rounded-xl text-center font-semibold hover:bg-green-700 transition"
             >
               Registrarse
             </Link>

@@ -1,31 +1,25 @@
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
-import api from "../api/axios";
 import toast from "react-hot-toast";
-import { clearTokens } from "../utils/token";
 
 export default function Navbar() {
 
-  const { user, logout, setUser } = useAuth();
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
 
-  const logoutAll = async () => {
+  const handleLogout = async () => {
+    const confirmed = window.confirm(
+      "¿Estás seguro de cerrar sesión?"
+    );
+    if (!confirmed) return;
 
     try {
-
-      await api.post("/auth/logout-all");
-
-      toast.success("Sesiones cerradas");
-
+      await logout();
+      navigate("/");
     } catch (err) {
-
-      console.log(err);
-
+      console.error(err);
+      toast.error("No se pudo cerrar sesión");
     }
-
-    clearTokens();
-
-    setUser(null);
-
   };
 
   return (
@@ -100,33 +94,18 @@ export default function Navbar() {
 
         {
           user && (
-            <>
-              <button
-                onClick={logout}
-                className="
-                bg-red-500
-                text-white
-                px-4
-                py-2
-                rounded-lg
-                "
-              >
-                Logout
-              </button>
-
-              <button
-                onClick={logoutAll}
-                className="
-                bg-black
-                text-white
-                px-4
-                py-2
-                rounded-lg
-                "
-              >
-                Logout All
-              </button>
-            </>
+            <button
+              onClick={handleLogout}
+              className="
+              bg-red-500
+              text-white
+              px-4
+              py-2
+              rounded-lg
+              "
+            >
+              Cerrar sesión
+            </button>
           )
         }
 

@@ -43,9 +43,10 @@ export const AuthProvider = ({ children }) => {
     );
 
     if (res.data.requires2FA) {
-
       return {
-        requires2FA: true
+        requires2FA: true,
+        primer_inicio: res.data.primer_inicio,
+        dos_fa: res.data.dos_fa,
       };
     }
 
@@ -54,12 +55,20 @@ export const AuthProvider = ({ children }) => {
       res.data.refreshToken
     );
 
-    const decoded =
-      getUserFromToken();
+    const decoded = getUserFromToken();
+    const userData = {
+      ...decoded,
+      primer_inicio: res.data.primer_inicio,
+      dos_fa: res.data.dos_fa,
+      rol: decoded?.rol,
+    };
 
-    setUser(decoded);
+    setUser(userData);
 
-    return res.data;
+    return {
+      ...res.data,
+      user: userData,
+    };
   };
 
   const logout = async () => {

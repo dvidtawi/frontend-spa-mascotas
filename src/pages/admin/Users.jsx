@@ -3,6 +3,7 @@ import {
   useState
 } from "react";
 
+import { useAuth } from "../../auth/AuthContext";
 import toast from "react-hot-toast";
 
 import api from "../../api/axios";
@@ -10,17 +11,50 @@ import api from "../../api/axios";
 import Navbar from "../../components/Navbar";
 import Sidebar from "../../components/Sidebar";
 import ModalChangePassword from "../../components/ModalChangePassword";
+import ModalUserForm from "../../components/ModalUserForm";
+
+const roleLabels = {
+  admin: "Administrador",
+  groomer: "Groomer",
+  recepcionista: "Recepcionista",
+  cliente: "Cliente",
+  1: "Administrador",
+  2: "Groomer",
+  3: "Recepcionista",
+  4: "Cliente",
+};
+
+const roleValueFromApi = {
+  admin: 1,
+  groomer: 2,
+  recepcionista: 3,
+  cliente: 4,
+};
+
+const getRoleIdFromUser = (user) => {
+  if (user?.rol_id) return user.rol_id;
+  if (user?.rol && roleValueFromApi[user.rol]) return roleValueFromApi[user.rol];
+  return 4;
+};
+
+const getRoleLabelFromUser = (user) => {
+  if (user?.rol && roleLabels[user.rol]) return roleLabels[user.rol];
+  if (user?.rol_id && roleLabels[user.rol_id]) return roleLabels[user.rol_id];
+  return user?.rol || `Rol ${user?.rol_id || "desconocido"}`;
+};
 
 export default function Users() {
+
+  const { user: currentUser } = useAuth();
 
   const [users, setUsers] =
     useState([]);
 
   const [showChangePassword, setShowChangePassword] = useState(false);
-
+  const [showUserForm, setShowUserForm] = useState(false);
+  const [editingUser, setEditingUser] = useState(null);
   const [form, setForm] =
     useState({
-
       nombre: "",
       email: "",
       telefono: "",
@@ -28,70 +62,102 @@ export default function Users() {
     });
 
   const fetchUsers = async () => {
-
     try {
-
-      const res =
-        await api.get(
-          "/admin/users"
-        );
-
+      const res = await api.get("/admin/users");
       setUsers(res.data);
-
     } catch (err) {
-
-      toast.error(
-        "Error cargando usuarios"
-      );
+      toast.error("Error cargando usuarios");
     }
   };
 
   useEffect(() => {
-
     fetchUsers();
-
   }, []);
 
-  const createUser = async () => {
+  const openCreateForm = () => {
+    setEditingUser(null);
+    setForm({ nombre: "", email: "", telefono: "", rol_id: 4 });
+    setShowUserForm(true);
+  };
+
+  const openEditForm = (user) => {
+    setEditingUser(user);
+    setForm({
+      nombre: user.nombre || "",
+      email: user.email || "",
+      telefono: user.telefono || "",
+      rol_id: getRoleIdFromUser(user)
+    });
+    setShowUserForm(true);
+  };
+
+  const closeForm = () => {
+    setShowUserForm(false);
+    setEditingUser(null);
+    setForm({ nombre: "", email: "", telefono: "", rol_id: 4 });
+  };
+
+  const validateForm = () => {
+    if (!form.nombre.trim()) {
+      return "El nombre es obligatorio.";
+    }
+
+    if (!form.email.trim()) {
+      return "El correo es obligatorio.";
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(form.email.trim())) {
+      return "Ingresa un correo válido.";
+    }
+
+    if (!form.telefono.trim()) {
+      return "El teléfono es obligatorio.";
+    }
+
+    return null;
+  };
+
+  const saveUser = async () => {
+    const validationError = validateForm();
+    if (validationError) {
+      toast.error(validationError);
+      return;
+    }
 
     try {
-
-      await api.post(
-        "/admin/users",
-        form
-      );
-
-      toast.success(
-        "Usuario creado"
-      );
-
+      if (editingUser) {
+        await api.put(`/admin/users/${editingUser.id}`, form);
+        toast.success("Usuario actualizado");
+      } else {
+        await api.post("/admin/users", form);
+        toast.success("Usuario registrado");
+      }
       fetchUsers();
-
+      closeForm();
     } catch (err) {
-
-      toast.error(
-        err.response?.data?.message
-      );
+      toast.error(err.response?.data?.message || "Error al guardar usuario");
     }
   };
 
-  const toggleUser = async (id) => {
+  const toggleUser = async (user) => {
+    if (user.id === currentUser?.id) {
+      toast.error("No puedes cambiar tu propio estado");
+      return;
+    }
+
+    const action = user.estado_activo ? "inactivar" : "activar";
+    const confirmed = window.confirm(
+      `¿Estás seguro de ${action} al usuario ${user.email}?`
+    );
+    if (!confirmed) return;
 
     try {
-
-      await api.patch(
-        `/admin/users/${id}/toggle`
-      );
-
-      toast.success(
-        "Estado actualizado"
-      );
-
+      await api.patch(`/admin/users/${user.id}/toggle`);
+      toast.success(`Usuario ${action}o correctamente`);
       fetchUsers();
-
     } catch (err) {
-
-      toast.error("Error");
+      toast.error(err.response?.data?.message || "Error al cambiar estado");
     }
   };
 
@@ -107,224 +173,72 @@ export default function Users() {
 
         <main className="flex-1 p-8">
 
-          <h1
-            className="
-            text-4xl
-            font-bold
-            mb-6
-            "
-          >
-            Usuarios
-          </h1>
-
-          {/* CREATE */}
-
-          <div
-            className="
-            bg-white
-            p-6
-            rounded-xl
-            shadow
-            mb-8
-            "
-          >
-
-            <h2
-              className="
-              text-2xl
-              font-bold
-              mb-4
-              "
-            >
-              Crear Usuario
-            </h2>
-
-            <div
-              className="
-              grid
-              grid-cols-2
-              gap-4
-              "
-            >
-
-              <input
-                placeholder="Nombre"
-                className="border p-3 rounded-lg"
-
-                onChange={(e) =>
-                  setForm({
-                    ...form,
-                    nombre:
-                      e.target.value
-                  })
-                }
-              />
-
-              <input
-                placeholder="Email"
-                className="border p-3 rounded-lg"
-
-                onChange={(e) =>
-                  setForm({
-                    ...form,
-                    email:
-                      e.target.value
-                  })
-                }
-              />
-
-              <input
-                placeholder="Teléfono"
-                className="border p-3 rounded-lg"
-
-                onChange={(e) =>
-                  setForm({
-                    ...form,
-                    telefono:
-                      e.target.value
-                  })
-                }
-              />
-
-              <select
-                className="border p-3 rounded-lg"
-
-                onChange={(e) =>
-                  setForm({
-                    ...form,
-                    rol_id:
-                      Number(e.target.value)
-                  })
-                }
-              >
-
-                <option value={2}>
-                  Groomer
-                </option>
-
-                <option value={3}>
-                  Recepcionista
-                </option>
-
-                <option value={4}>
-                  Cliente
-                </option>
-
-              </select>
-
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <h1 className="text-4xl font-bold">Usuarios</h1>
+              <p className="text-gray-600">Administra las cuentas del sistema.</p>
             </div>
-
             <button
-              onClick={createUser}
-              className="
-              mt-4
-              bg-blue-600
-              text-white
-              px-6
-              py-3
-              rounded-lg
-              "
+              onClick={openCreateForm}
+              className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700"
             >
-              Crear
+              Registrar usuario
             </button>
-
           </div>
 
-          {/* TABLE */}
+          <ModalUserForm
+            isOpen={showUserForm}
+            editingUser={editingUser}
+            form={form}
+            setForm={setForm}
+            onClose={closeForm}
+            onSave={saveUser}
+          />
 
-          <div
-            className="
-            bg-white
-            rounded-xl
-            shadow
-            overflow-hidden
-            "
-          >
-
-            <table className="w-full">
-
-              <thead
-                className="
-                bg-gray-200
-                "
-              >
-
+          <div className="bg-white rounded-xl shadow overflow-hidden">
+            <table className="w-full text-left border-collapse">
+              <thead className="bg-gray-200">
                 <tr>
-
-                  <th className="p-4">
-                    Nombre
-                  </th>
-
-                  <th>Email</th>
-
-                  <th>Rol</th>
-
-                  <th>Estado</th>
-
-                  <th>Acción</th>
-
+                  <th className="px-4 py-3">Nombre</th>
+                  <th className="px-4 py-3">Email</th>
+                  <th className="px-4 py-3">Rol</th>
+                  <th className="px-4 py-3">Teléfono</th>
+                  <th className="px-4 py-3">Estado</th>
+                  <th className="px-4 py-3">Acciones</th>
                 </tr>
-
               </thead>
-
               <tbody>
-
-                {
-                  users.map((u) => (
-
-                    <tr
-                      key={u.id}
-                      className="border-t"
-                    >
-
-                      <td className="p-4">
-                        {u.nombre}
-                      </td>
-
-                      <td>
-                        {u.email}
-                      </td>
-
-                      <td>
-                        {u.rol_id}
-                      </td>
-
-                      <td>
-                        {
-                          u.estado_activo
-                            ? "Activo"
-                            : "Inactivo"
-                        }
-                      </td>
-
-                      <td>
-
-                        <button
-                          onClick={() =>
-                            toggleUser(u.id)
-                          }
-
-                          className="
-                          bg-red-500
-                          text-white
-                          px-4
-                          py-2
-                          rounded-lg
-                          "
-                        >
-                          Toggle
-                        </button>
-
-                      </td>
-
-                    </tr>
-                  ))
-                }
-
+                {users.map((u) => (
+                  <tr key={u.id} className="border-t hover:bg-gray-50">
+                    <td className="px-4 py-3">{u.nombre}</td>
+                    <td className="px-4 py-3">{u.email}</td>
+                    <td className="px-4 py-3">{getRoleLabelFromUser(u)}</td>
+                    <td className="px-4 py-3">{u.telefono || "-"}</td>
+                    <td className="px-4 py-3">
+                      <span className={
+                        `px-3 py-1 rounded-full text-sm ${u.estado_activo ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`
+                      }>
+                        {u.estado_activo ? "Activo" : "Inactivo"}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 flex gap-2 flex-wrap">
+                      <button
+                        onClick={() => openEditForm(u)}
+                        className="bg-yellow-500 text-white px-4 py-2 rounded-lg hover:bg-yellow-600"
+                      >
+                        Editar
+                      </button>
+                      <button
+                        onClick={() => toggleUser(u)}
+                        className="bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600"
+                      >
+                        {u.estado_activo ? "Inactivar" : "Activar"}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
               </tbody>
-
             </table>
-
           </div>
 
         </main>

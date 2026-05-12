@@ -4,7 +4,7 @@ import {
 
 import { useState } from 'react';
 
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 
 import toast from 'react-hot-toast';
 
@@ -218,30 +218,30 @@ const Login = () => {
           )}
 
           <div className="text-center mt-4">
-
-            <a
-                href="/forgot-password"
-                className="
-                text-blue-600
-                hover:underline
-                "
+            <Link
+              to="/forgot-password"
+              className="text-blue-600 hover:underline"
             >
-                ¿Olvidaste tu contraseña?
-            </a>
-
+              ¿Olvidaste tu contraseña?
+            </Link>
             <br />
-
-            <a
-                href="/register"
-                className="
-                text-blue-600
-                hover:underline
-                "
+            <Link
+              to="/register"
+              className="text-blue-600 hover:underline"
             >
-                ¿No tienes una cuenta? Regístrate
-            </a>
+              ¿No tienes una cuenta? Regístrate
+            </Link>
+          </div>
 
-        </div>  
+          <div className="text-center mt-6">
+            <Link
+              to="/"
+              className="text-gray-600 hover:text-gray-900"
+            >
+              ← Volver a la vista de cliente
+            </Link>
+          </div>
+  
         </form>
 
       </div>

@@ -1,5 +1,8 @@
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
+import api from "../api/axios";
+import toast from "react-hot-toast";
+import { clearTokens } from "../utils/token";
 
 const dashboardRoute = {
   1: "/admin",
@@ -10,9 +13,28 @@ const dashboardRoute = {
 
 export default function Sidebar({ onChangePassword }) {
 
-  const { user } = useAuth();
+  const { user, setUser } = useAuth();
+  const navigate = useNavigate();
 
   if (!user) return null;
+
+  const handleLogoutAll = async () => {
+    const confirmed = window.confirm(
+      "¿Estás seguro de cerrar sesión en todos los dispositivos?"
+    );
+    if (!confirmed) return;
+
+    try {
+      await api.post("/auth/logout-all");
+      toast.success("Sesiones cerradas");
+    } catch (err) {
+      toast.error("No se pudo cerrar sesión en todos los dispositivos");
+    }
+
+    clearTokens();
+    setUser(null);
+    navigate("/");
+  };
 
   return (
 
@@ -65,6 +87,13 @@ export default function Sidebar({ onChangePassword }) {
           </Link>
         )}
 
+        <button
+          onClick={handleLogoutAll}
+          className="text-left hover:text-blue-300"
+        >
+          Cerrar sesión en todos los dispositivos
+        </button>
+
         <span className="text-sm text-gray-500">
           Mi cuenta (próximamente)
         </span>
@@ -75,36 +104,19 @@ export default function Sidebar({ onChangePassword }) {
               Administrador
             </div>
 
-            {user.primer_inicio ? (
-              <Link
-                to="/admin/setup-2fa"
-                className="hover:text-blue-300"
-              >
-                Configurar 2FA
-              </Link>
-            ) : (
-              <>
-                <Link
-                  to="/admin/users"
-                  className="hover:text-blue-300"
-                >
-                  Usuarios
-                </Link>
+            <Link
+              to="/admin/users"
+              className="hover:text-blue-300"
+            >
+              Usuarios
+            </Link>
 
-                <Link
-                  to="/admin/audit"
-                  className="hover:text-blue-300"
-                >
-                  Audit Logs
-                </Link>
-
-                {user.two_factor_enabled && (
-                  <span className="text-sm text-emerald-300">
-                    2FA activado
-                  </span>
-                )}
-              </>
-            )}
+            <Link
+              to="/admin/audit"
+              className="hover:text-blue-300"
+            >
+              Audit Logs
+            </Link>
           </>
         )}
 

@@ -32,7 +32,7 @@ export default function DashboardAdmin() {
           <div
             className="
             grid
-            grid-cols-3
+            grid-cols-2
             gap-6
             "
           >
@@ -67,22 +67,6 @@ export default function DashboardAdmin() {
             >
               <h2 className="text-xl font-semibold mb-2">Auditoría</h2>
               <p>Ver logs de auditoría del sistema.</p>
-            </Link>
-
-            <Link
-              to="/admin/setup-2fa"
-              className="
-              bg-white
-              p-6
-              rounded-xl
-              shadow
-              hover:shadow-lg
-              transition
-              block
-              "
-            >
-              <h2 className="text-xl font-semibold mb-2">Seguridad 2FA</h2>
-              <p>Configurar autenticación de dos factores.</p>
             </Link>
 
           </div>
