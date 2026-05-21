@@ -59,7 +59,72 @@ export default function Navbar() {
 
       </h1>
 
-      <div className="flex gap-4">
+      <div className="flex gap-4 items-center">
+
+        {user && (
+          <div className="flex gap-4">
+            {/* Links según rol */}
+            {user?.rol === 1 && (
+              <>
+                <Link
+                  to="/admin"
+                  className="text-gray-600 hover:text-blue-600 font-semibold"
+                >
+                  Dashboard
+                </Link>
+                <Link
+                  to="/admin/schedule"
+                  className="text-gray-600 hover:text-blue-600 font-semibold"
+                >
+                  Agenda
+                </Link>
+              </>
+            )}
+            
+            {user?.rol === 4 && (
+              <>
+                <Link
+                  to="/cliente"
+                  className="text-gray-600 hover:text-blue-600 font-semibold"
+                >
+                  Dashboard
+                </Link>
+                <Link
+                  to="/cliente/schedule"
+                  className="text-gray-600 hover:text-blue-600 font-semibold"
+                >
+                  Mis Citas
+                </Link>
+              </>
+            )}
+
+            {user?.rol === 2 && (
+              <Link
+                to="/groomer"
+                className="text-gray-600 hover:text-blue-600 font-semibold"
+              >
+                Dashboard
+              </Link>
+            )}
+
+            {user?.rol === 3 && (
+              <>
+                <Link
+                  to="/recepcion"
+                  className="text-gray-600 hover:text-blue-600 font-semibold"
+                >
+                  Dashboard
+                </Link>
+                <Link
+                  to="/admin/schedule"
+                  className="text-gray-600 hover:text-blue-600 font-semibold"
+                >
+                  Agenda
+                </Link>
+              </>
+            )}
+          </div>
+        )}
 
         {
           !user && (

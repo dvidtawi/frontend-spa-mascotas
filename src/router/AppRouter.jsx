@@ -19,6 +19,8 @@ import DashboardAdmin from '../pages/admin/Dashboard';
 import DashboardCliente from '../pages/cliente/Dashboard';
 import DashboardGroomer from '../pages/groomer/Dashboard';
 import DashboardRecepcion from '../pages/recepcion/Dashboard';
+import ScheduleAdminDashboard from '../pages/admin/ScheduleManagement';
+import DashboardClienteSchedule from '../pages/cliente/ScheduleDashboard';
 
 import ProtectedRoute from '../auth/ProtectedRoute';
 import RoleRoute from '../auth/RoleRoute';
@@ -132,6 +134,30 @@ const AppRouter = () => {
 
             </RoleRoute>
 
+          </ProtectedRoute>
+        }
+      />
+
+      {/* SCHEDULE - ADMIN */}
+      <Route
+        path="/admin/schedule"
+        element={
+          <ProtectedRoute>
+            <RoleRoute roles={[1, 3]}>
+              <ScheduleAdminDashboard />
+            </RoleRoute>
+          </ProtectedRoute>
+        }
+      />
+
+      {/* SCHEDULE - CLIENTE */}
+      <Route
+        path="/cliente/schedule"
+        element={
+          <ProtectedRoute>
+            <RoleRoute roles={[4]}>
+              <DashboardClienteSchedule />
+            </RoleRoute>
           </ProtectedRoute>
         }
       />
