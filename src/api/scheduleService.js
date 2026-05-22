@@ -1,311 +1,384 @@
 import api from './axios';
 
-// ============ TRANSFORMADORES DE DATOS ============
 const transformServicio = (servicio) => ({
   ...servicio,
   duracion_minutos: servicio.duracion_base || servicio.duracion_minutos,
   activo: servicio.estado_activo !== undefined ? servicio.estado_activo : servicio.activo,
-  precio: typeof servicio.precio === 'string' ? parseFloat(servicio.precio) : servicio.precio
+  precio: typeof servicio.precio === 'string' ? parseFloat(servicio.precio) : servicio.precio,
 });
 
 const transformMascota = (mascota) => ({
   ...mascota,
-  ajuste_porcentaje: mascota.ajuste_porcentaje || 0
+  tamano: mascota.tamano || mascota['tamaño'] || '',
+  minutos_adicionales_temperamento:
+    Number(mascota.minutos_adicionales_temperamento) || 0,
 });
+
+const buildPetFormData = (data) => {
+  const formData = new FormData();
+
+  Object.entries(data).forEach(([key, value]) => {
+    if (value === undefined || value === null || value === '') return;
+    if (key === 'carnet') {
+      formData.append('carnet', value);
+      return;
+    }
+    formData.append(key, value);
+  });
+
+  return formData;
+};
 
 const transformCita = (cita) => ({
   ...cita,
   mascota_nombre: cita.mascota_nombre || cita.mascota?.nombre || '',
   servicio_nombre: cita.servicio_nombre || cita.servicio?.nombre || '',
-  estado: cita.estado || 'pendiente'
+  estado: cita.estado || 'en_revision',
 });
 
-// ============ SERVICIOS ============
 export const scheduleServices = {
-  // Obtener todos los servicios
-  getServicios: async () => {
-    const res = await api.get('/schedule/servicios');
+  getServicios: async (options = {}) => {
+    const params = {};
+    if (options.includeInactive) {
+      params.include_inactive = true;
+    }
+
+    const res = await api.get('/schedule/servicios', { params });
     const serviciosData = res.data.data || res.data;
     return {
       ...res,
-      data: Array.isArray(serviciosData) ? serviciosData.map(transformServicio) : serviciosData
+      data: Array.isArray(serviciosData)
+        ? serviciosData.map(transformServicio)
+        : serviciosData,
     };
   },
-  
-  // Crear servicio (admin, recepcion)
+
   createServicio: async (data) => {
     const res = await api.post('/schedule/servicios', data);
     const servicioData = res.data.data || res.data;
     return {
       ...res,
-      data: transformServicio(servicioData)
+      data: transformServicio(servicioData),
     };
   },
-  
-  // Actualizar servicio (admin)
+
   updateServicio: async (id, data) => {
     const res = await api.put(`/schedule/servicios/${id}`, data);
     const servicioData = res.data.data || res.data;
     return {
       ...res,
-      data: transformServicio(servicioData)
+      data: transformServicio(servicioData),
     };
   },
-  
-  // Eliminar servicio (admin)
+
   deleteServicio: (id) => api.delete(`/schedule/servicios/${id}`),
 };
 
-// ============ MASCOTAS ============
 export const petServices = {
-  // Obtener mascotas del cliente actual
   getMascotasCliente: async () => {
     const res = await api.get('/schedule/mascotas');
     const mascotasData = res.data.data || res.data;
     return {
       ...res,
-      data: Array.isArray(mascotasData) ? mascotasData.map(transformMascota) : mascotasData
+      data: Array.isArray(mascotasData)
+        ? mascotasData.map(transformMascota)
+        : mascotasData,
     };
   },
-  
-  // Crear mascota (cliente)
+
   createMascota: async (data) => {
-    const res = await api.post('/schedule/mascotas', data);
+    const res = await api.post('/schedule/mascotas', buildPetFormData(data), {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
     const mascotaData = res.data.data || res.data;
     return {
       ...res,
-      data: transformMascota(mascotaData)
+      data: transformMascota(mascotaData),
     };
   },
-  
-  // Actualizar mascota (cliente)
+
   updateMascota: async (id, data) => {
-    const res = await api.put(`/schedule/mascotas/${id}`, data);
+    const res = await api.put(`/schedule/mascotas/${id}`, buildPetFormData(data), {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
     const mascotaData = res.data.data || res.data;
     return {
       ...res,
-      data: transformMascota(mascotaData)
+      data: transformMascota(mascotaData),
     };
   },
-  
-  // Eliminar mascota (cliente)
+
   deleteMascota: (id) => api.delete(`/schedule/mascotas/${id}`),
-  
-  // Obtener características de mascotas
+
   getCaracteristicas: async () => {
     const res = await api.get('/schedule/caracteristicas-mascotas');
-    const caracteristicasData = res.data.data || res.data?.caracteristicas || res.data;
     return {
       ...res,
-      data: caracteristicasData
+      data: res.data.data || res.data,
+    };
+  },
+
+  getMascotasByCliente: async (clienteId) => {
+    const res = await api.get(`/schedule/clientes/${clienteId}/mascotas`);
+    const mascotasData = res.data.data || res.data;
+    return {
+      ...res,
+      data: Array.isArray(mascotasData)
+        ? mascotasData.map(transformMascota)
+        : mascotasData,
     };
   },
 };
 
-// ============ DISPONIBILIDAD SPA ============
 export const spaAvailabilityServices = {
-  // Obtener disponibilidad del spa
-  getDisponibilidad: async () => {
-    const res = await api.get('/schedule/disponibilidad-spa');
-    const disponibilidadData = res.data.data || res.data;
-    return {
-      ...res,
-      data: disponibilidadData
-    };
+  getDisponibilidad: async (fechaBase) => {
+    const res = await api.get('/schedule/disponibilidad-spa', {
+      params: fechaBase ? { fecha_base: fechaBase } : {},
+    });
+    return { ...res, data: res.data.data || res.data };
   },
-  
-  // Crear horario (admin)
+
   createHorario: async (data) => {
     const res = await api.post('/schedule/disponibilidad-spa', data);
-    const horarioData = res.data.data || res.data;
-    return {
-      ...res,
-      data: horarioData
-    };
+    return { ...res, data: res.data.data || res.data };
   },
-  
-  // Actualizar horario (admin)
+
   updateHorario: async (id, data) => {
     const res = await api.put(`/schedule/disponibilidad-spa/${id}`, data);
-    const horarioData = res.data.data || res.data;
-    return {
-      ...res,
-      data: horarioData
-    };
+    return { ...res, data: res.data.data || res.data };
   },
-  
-  // Eliminar horario (admin)
+
   deleteHorario: async (id) => {
     const res = await api.delete(`/schedule/disponibilidad-spa/${id}`);
-    return {
-      ...res,
-      data: res.data
-    };
+    return { ...res, data: res.data };
   },
 };
 
-// ============ DISPONIBILIDAD GROOMER ============
 export const groomerAvailabilityServices = {
-  // Obtener disponibilidad de un groomer específico
   getDisponibilidadGroomer: async (groomerId) => {
     const res = await api.get(`/schedule/disponibilidad-groomer/${groomerId}`);
-    const disponibilidadData = res.data.data || res.data;
-    return {
-      ...res,
-      data: disponibilidadData
-    };
+    return { ...res, data: res.data.data || res.data };
   },
-  
-  // Crear horario de groomer (admin)
+
   createHorarioGroomer: (data) => api.post('/schedule/disponibilidad-groomer', data),
-  
-  // Actualizar horario de groomer (admin)
   updateHorarioGroomer: (id, data) => api.put(`/schedule/disponibilidad-groomer/${id}`, data),
-  
-  // Eliminar horario de groomer (admin)
   deleteHorarioGroomer: (id) => api.delete(`/schedule/disponibilidad-groomer/${id}`),
-  
-  // Obtener todos los groomers
+
   getGroomers: async () => {
     const res = await api.get('/schedule/groomers');
-    const groomersData = res.data.data || res.data;
-    return {
-      ...res,
-      data: Array.isArray(groomersData) ? groomersData : groomersData
-    };
+    return { ...res, data: res.data.data || res.data };
+  },
+
+  getClientes: async () => {
+    const res = await api.get('/schedule/clientes');
+    return { ...res, data: res.data.data || res.data };
   },
 };
 
-// ============ BLOQUEOS ============
 export const blockServices = {
-  // Crear bloqueo (admin, recepcion)
   createBloqueo: (data) => api.post('/schedule/bloqueos', data),
-  
-  // Obtener bloqueos de un groomer
+
   getBloqueos: async (groomerId) => {
-    const res = await api.get(`/schedule/bloqueos/${groomerId}`);
-    const bloqueosData = res.data.data || res.data;
-    return {
-      ...res,
-      data: Array.isArray(bloqueosData) ? bloqueosData : bloqueosData
-    };
+    const res = await api.get(`/schedule/bloqueos/${groomerId}`, {
+      params: { include_inactive: true },
+    });
+    return { ...res, data: res.data.data || res.data };
   },
-  
-  // Actualizar bloqueo (admin, recepcion)
+
+  getAllBloqueos: async (scope) => {
+    const res = await api.get('/schedule/bloqueos', {
+      params: { ...(scope ? { scope } : {}), include_inactive: true },
+    });
+    return { ...res, data: res.data.data || res.data };
+  },
+
   updateBloqueo: (id, data) => api.put(`/schedule/bloqueos/${id}`, data),
-  
-  // Eliminar bloqueo (admin, recepcion)
   deleteBloqueo: (id) => api.delete(`/schedule/bloqueos/${id}`),
 };
 
-// ============ CITAS (SLOTS) ============
 export const slotServices = {
-  // Obtener mis citas (cliente)
   getMisCitas: async () => {
     const res = await api.get('/schedule/mis-citas');
     const citasData = res.data.data || res.data;
     return {
       ...res,
-      data: Array.isArray(citasData) ? citasData.map(transformCita) : citasData
+      data: Array.isArray(citasData) ? citasData.map(transformCita) : citasData,
     };
   },
-  
-  // Obtener slots disponibles
+
   getSlotsDisponibles: async (params) => {
     const res = await api.get('/schedule/slots-disponibles', { params });
     const slotsData = res.data.data || res.data;
-    
-    // El backend retorna { disponibles: [], total_slots: n }
-    const slots = Array.isArray(slotsData) ? slotsData : (slotsData?.disponibles || []);
-    
     return {
       ...res,
-      data: slots
+      data: Array.isArray(slotsData)
+        ? slotsData
+        : slotsData?.disponibles || [],
     };
   },
-  
-  // Crear cita (cliente)
+
   createCita: async (data) => {
     const res = await api.post('/schedule/citas', data);
     const citaData = res.data.data || res.data;
     return {
       ...res,
-      data: transformCita(citaData)
+      data: transformCita(citaData),
     };
   },
-  
-  // Obtener detalles de una cita
+
+  createCitaAdmin: async (data) => {
+    const res = await api.post('/schedule/citas/admin', data);
+    const citaData = res.data.data || res.data;
+    return {
+      ...res,
+      data: transformCita(citaData),
+    };
+  },
+
   getCita: async (citaId) => {
     const res = await api.get(`/schedule/citas/${citaId}`);
     const citaData = res.data.data || res.data;
     return {
       ...res,
-      data: transformCita(citaData)
+      data: transformCita(citaData),
     };
   },
-  
-  // Cancelar cita (cliente)
-  cancelarCita: (citaId, motivo) => 
-    api.put(`/schedule/citas/${citaId}/cancelar`, { motivo }),
-  
-  // Obtener todas las citas (admin, recepcion)
+
+  cancelarCita: (citaId, motivo) =>
+    api.put(`/schedule/citas/${citaId}/cancelar`, { razon: motivo }),
+
   getCitas: async (params) => {
-    const res = await api.get('/schedule/citas', { params });
+    const finalParams = { ...(params || {}) };
+    if (finalParams.estado === 'en_revision' && finalParams.include_diagnostico === undefined) {
+      finalParams.include_diagnostico = true;
+    }
+
+    const res = await api.get('/schedule/citas', { params: finalParams });
     const citasData = res.data.data || res.data;
     return {
       ...res,
-      data: Array.isArray(citasData) ? citasData.map(transformCita) : citasData
+      data: Array.isArray(citasData) ? citasData.map(transformCita) : citasData,
     };
   },
-  
-  // Actualizar cita (admin, recepcion)
+
   updateCita: async (id, data) => {
     const res = await api.put(`/schedule/citas/${id}`, data);
     const citaData = res.data.data || res.data;
     return {
       ...res,
-      data: transformCita(citaData)
+      data: transformCita(citaData),
     };
   },
-  
-  // Eliminar cita (admin, recepcion)
-  deleteCita: (id) => api.delete(`/schedule/citas/${id}`),
+
+  aprobarCita: async (id, data = {}) => {
+    const res = await api.put(`/schedule/citas/${id}/aprobar`, data);
+    const citaData = res.data.data || res.data;
+    return { ...res, data: transformCita(citaData) };
+  },
+
+  rechazarCita: async (id, data = {}) => {
+    const res = await api.put(`/schedule/citas/${id}/rechazar`, data);
+    const citaData = res.data.data || res.data;
+    return { ...res, data: transformCita(citaData) };
+  },
+
+  getAgenda: async (params) => {
+    const res = await api.get('/schedule/agenda', { params });
+    return { ...res, data: res.data.data || res.data };
+  },
 };
 
-// ============ UTILIDADES ============
-export const scheduleUtils = {
-  // Calcular duración ajustada
-  calcularDuracionAjustada: (duracionBase, ajuste) => {
-    return Math.ceil(duracionBase + (duracionBase * ajuste / 100));
+export const paymentServices = {
+  registrarPago: async (data) => {
+    const res = await api.post('/schedule/pagos', data);
+    return { ...res, data: res.data.data || res.data };
   },
-  
-  // Formatear duración en horas y minutos
+
+  getPagos: async (params) => {
+    const res = await api.get('/schedule/pagos', { params });
+    return { ...res, data: res.data.data || res.data };
+  },
+
+  getCierreCaja: async (fecha) => {
+    const res = await api.get('/schedule/cierre-caja', { params: { fecha } });
+    return { ...res, data: res.data.data || res.data };
+  },
+};
+
+export const groomingServices = {
+  getAgendaHoy: async (fecha) => {
+    const res = await api.get('/schedule/groomer/agenda', { params: fecha ? { fecha } : {} });
+    return { ...res, data: res.data.data || res.data };
+  },
+
+  getFicha: async (citaId) => {
+    const res = await api.get(`/schedule/groomer/citas/${citaId}/ficha`);
+    return { ...res, data: res.data.data || res.data };
+  },
+
+  guardarFicha: async (citaId, data) => {
+    const res = await api.put(`/schedule/groomer/citas/${citaId}/ficha`, data);
+    return { ...res, data: res.data.data || res.data };
+  },
+
+  subirFoto: async (citaId, tipo, file) => {
+    const formData = new FormData();
+    formData.append('foto', file);
+    const res = await api.post(`/schedule/groomer/citas/${citaId}/fotos/${tipo}`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return { ...res, data: res.data.data || res.data };
+  },
+
+  iniciarServicio: async (citaId) => {
+    const res = await api.put(`/schedule/groomer/citas/${citaId}/iniciar`);
+    return { ...res, data: res.data.data || res.data };
+  },
+
+  finalizarServicio: async (citaId, data = {}) => {
+    const res = await api.put(`/schedule/groomer/citas/${citaId}/finalizar`, data);
+    return { ...res, data: res.data.data || res.data };
+  },
+};
+
+export const scheduleUtils = {
+  calcularDuracionAjustada: (duracionBase, porcentajeAjuste = 0, minutosExtra = 0) =>
+    Math.ceil(duracionBase + (duracionBase * porcentajeAjuste / 100)) + minutosExtra,
+
   formatearDuracion: (minutos) => {
     if (!minutos) return '0 min';
     const horas = Math.floor(minutos / 60);
     const mins = minutos % 60;
-    
+
     if (horas === 0) return `${mins} min`;
     if (mins === 0) return `${horas}h`;
     return `${horas}h ${mins}min`;
   },
-  
-  // Convertir minutos a formato HH:MM
-  minutosAHora: (minutos) => {
-    const horas = Math.floor(minutos / 60);
-    const mins = minutos % 60;
-    return `${String(horas).padStart(2, '0')}:${String(mins).padStart(2, '0')}`;
-  },
-  
-  // Obtener días de la semana
+
   getDiasSemanaNombres: () => [
     'Lunes',
     'Martes',
-    'Miércoles',
+    'Miercoles',
     'Jueves',
     'Viernes',
-    'Sábado',
-    'Domingo'
+    'Sabado',
+    'Domingo',
   ],
-};
 
+  calcularEdad: (fechaNacimiento) => {
+    if (!fechaNacimiento) return null;
+    const hoy = new Date();
+    const nacimiento = new Date(fechaNacimiento);
+    let edad = hoy.getFullYear() - nacimiento.getFullYear();
+    const diferenciaMes = hoy.getMonth() - nacimiento.getMonth();
+
+    if (
+      diferenciaMes < 0 ||
+      (diferenciaMes === 0 && hoy.getDate() < nacimiento.getDate())
+    ) {
+      edad -= 1;
+    }
+
+    return edad >= 0 ? edad : null;
+  },
+};

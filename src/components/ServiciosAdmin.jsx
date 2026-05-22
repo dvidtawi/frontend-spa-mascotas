@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { scheduleServices } from '../api/scheduleService';
 
 export default function ServiciosAdmin() {
@@ -12,7 +12,6 @@ export default function ServiciosAdmin() {
     descripcion: '',
     duracion_minutos: '',
     precio: '',
-    activo: true
   });
 
   useEffect(() => {
@@ -22,23 +21,21 @@ export default function ServiciosAdmin() {
   const loadServicios = async () => {
     try {
       setLoading(true);
-      const res = await scheduleServices.getServicios();
-      // Mostrar tanto activos como inactivos
-      const servicios = Array.isArray(res.data) ? res.data : [];
-      setServicios(servicios);
+      const res = await scheduleServices.getServicios({ includeInactive: true });
+      setServicios(Array.isArray(res.data) ? res.data : []);
+      setError(null);
     } catch (err) {
       setError('Error al cargar servicios');
-      console.error(err);
     } finally {
       setLoading(false);
     }
   };
 
   const handleFormChange = (e) => {
-    const { name, value, type, checked } = e.target;
-    setFormData(prev => ({
+    const { name, value } = e.target;
+    setFormData((prev) => ({
       ...prev,
-      [name]: type === 'checkbox' ? checked : value
+      [name]: value,
     }));
   };
 
@@ -48,7 +45,6 @@ export default function ServiciosAdmin() {
       descripcion: '',
       duracion_minutos: '',
       precio: '',
-      activo: true
     });
     setEditingServicio(null);
   };
@@ -59,7 +55,6 @@ export default function ServiciosAdmin() {
       descripcion: servicio.descripcion || '',
       duracion_minutos: servicio.duracion_base || servicio.duracion_minutos || '',
       precio: servicio.precio || '',
-      activo: servicio.estado_activo !== undefined ? servicio.estado_activo : (servicio.activo || true)
     });
     setEditingServicio(servicio.id);
     setShowForm(true);
@@ -78,9 +73,8 @@ export default function ServiciosAdmin() {
       const submitData = {
         nombre: formData.nombre,
         descripcion: formData.descripcion,
-        duracion_base: parseInt(formData.duracion_minutos),
+        duracion_base: parseInt(formData.duracion_minutos, 10),
         precio: parseFloat(formData.precio),
-        estado_activo: formData.activo
       };
 
       if (editingServicio) {
@@ -92,7 +86,6 @@ export default function ServiciosAdmin() {
       await loadServicios();
       resetForm();
       setShowForm(false);
-      setError(null);
     } catch (err) {
       setError(err.response?.data?.error || 'Error al guardar servicio');
     } finally {
@@ -100,123 +93,102 @@ export default function ServiciosAdmin() {
     }
   };
 
-  const handleDelete = async (id) => {
-    if (!window.confirm('¿Estás seguro de que deseas eliminar este servicio?')) return;
+  const handleToggleStatus = async (servicio) => {
+    const nuevoEstado = !servicio.estado_activo;
+    const mensaje = nuevoEstado
+      ? '¿Deseas volver a activar este servicio?'
+      : '¿Deseas cambiar este servicio a inactivo?';
+
+    if (!window.confirm(mensaje)) return;
 
     try {
-      await scheduleServices.deleteServicio(id);
-      setServicios(servicios.filter(s => s.id !== id));
+      await scheduleServices.updateServicio(servicio.id, { estado_activo: nuevoEstado });
+      await loadServicios();
     } catch (err) {
-      setError(err.response?.data?.error || 'Error al eliminar servicio');
+      setError(err.response?.data?.error || 'Error al cambiar el estado del servicio');
     }
   };
 
   if (loading && !showForm) {
-    return <div className="text-center py-8">Cargando servicios...</div>;
+    return <div className="py-8 text-center">Cargando servicios...</div>;
   }
 
   return (
-    <div className="bg-white rounded-lg shadow p-6">
-      <div className="flex justify-between items-center mb-6">
-        <h2 className="text-2xl font-bold text-gray-900">Gestión de Servicios</h2>
+    <div className="rounded-lg bg-white p-6 shadow">
+      <div className="mb-6 flex items-center justify-between">
+        <h2 className="text-2xl font-bold text-gray-900">Gestion de Servicios</h2>
         <button
           onClick={() => {
             resetForm();
             setShowForm(true);
           }}
-          className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition"
+          className="rounded-lg bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 transition"
         >
           + Nuevo Servicio
         </button>
       </div>
 
       {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-4">
+        <div className="mb-4 rounded border border-red-200 bg-red-50 px-4 py-3 text-red-700">
           {error}
         </div>
       )}
 
       {showForm && (
-        <div className="bg-gray-50 p-6 rounded-lg mb-6 border-l-4 border-blue-600">
-          <h3 className="text-lg font-bold mb-4">
+        <div className="mb-6 rounded-lg border-l-4 border-blue-600 bg-gray-50 p-6">
+          <h3 className="mb-4 text-lg font-bold">
             {editingServicio ? 'Editar Servicio' : 'Nuevo Servicio'}
           </h3>
 
           <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">
-                  Nombre *
-                </label>
+                <label className="mb-1 block text-sm font-semibold text-gray-700">Nombre *</label>
                 <input
                   type="text"
                   name="nombre"
                   value={formData.nombre}
                   onChange={handleFormChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Ej: Baño completo"
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2"
+                  placeholder="Ej: Bano completo"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">
-                  Duración (minutos) *
-                </label>
+                <label className="mb-1 block text-sm font-semibold text-gray-700">Duracion (minutos) *</label>
                 <input
                   type="number"
                   name="duracion_minutos"
                   value={formData.duracion_minutos}
                   onChange={handleFormChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Ej: 60"
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2"
                   min="1"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">
-                  Precio ($) *
-                </label>
+                <label className="mb-1 block text-sm font-semibold text-gray-700">Precio *</label>
                 <input
                   type="number"
                   name="precio"
                   value={formData.precio}
                   onChange={handleFormChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Ej: 40.00"
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2"
                   min="0"
                   step="0.01"
                 />
               </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">
-                  Activo
-                </label>
-                <label className="flex items-center">
-                  <input
-                    type="checkbox"
-                    name="activo"
-                    checked={formData.activo}
-                    onChange={handleFormChange}
-                    className="w-4 h-4"
-                  />
-                  <span className="ml-2 text-sm text-gray-700">Servicio activo</span>
-                </label>
-              </div>
             </div>
 
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-1">
-                Descripción
-              </label>
+              <label className="mb-1 block text-sm font-semibold text-gray-700">Descripcion</label>
               <textarea
                 name="descripcion"
                 value={formData.descripcion}
                 onChange={handleFormChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="Describe el servicio..."
+                className="w-full rounded-lg border border-gray-300 px-3 py-2"
                 rows="3"
+                placeholder="Describe el servicio..."
               />
             </div>
 
@@ -224,7 +196,7 @@ export default function ServiciosAdmin() {
               <button
                 type="submit"
                 disabled={loading}
-                className="flex-1 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition disabled:bg-blue-400"
+                className="flex-1 rounded-lg bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 disabled:bg-blue-400"
               >
                 {loading ? 'Guardando...' : 'Guardar'}
               </button>
@@ -234,7 +206,7 @@ export default function ServiciosAdmin() {
                   setShowForm(false);
                   resetForm();
                 }}
-                className="flex-1 bg-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-400 transition"
+                className="flex-1 rounded-lg bg-gray-300 px-4 py-2 text-gray-700 hover:bg-gray-400"
               >
                 Cancelar
               </button>
@@ -245,26 +217,24 @@ export default function ServiciosAdmin() {
 
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
-          <thead className="bg-gray-100 border-b-2 border-gray-300">
+          <thead className="border-b-2 border-gray-300 bg-gray-100">
             <tr>
               <th className="px-4 py-2 text-left font-semibold">Nombre</th>
-              <th className="px-4 py-2 text-left font-semibold">Duración</th>
+              <th className="px-4 py-2 text-left font-semibold">Duracion</th>
               <th className="px-4 py-2 text-left font-semibold">Precio</th>
               <th className="px-4 py-2 text-left font-semibold">Estado</th>
               <th className="px-4 py-2 text-center font-semibold">Acciones</th>
             </tr>
           </thead>
           <tbody>
-            {servicios.map(servicio => (
+            {servicios.map((servicio) => (
               <tr key={servicio.id} className="border-b hover:bg-gray-50">
-                <td className="px-4 py-3 font-semibold text-gray-900">
-                  {servicio.nombre}
-                </td>
+                <td className="px-4 py-3 font-semibold text-gray-900">{servicio.nombre}</td>
                 <td className="px-4 py-3">{servicio.duracion_base || servicio.duracion_minutos} min</td>
-                <td className="px-4 py-3">${parseFloat(servicio.precio).toFixed(2)}</td>
+                <td className="px-4 py-3">Bs {parseFloat(servicio.precio).toFixed(2)}</td>
                 <td className="px-4 py-3">
                   <span
-                    className={`px-3 py-1 rounded-full text-xs font-semibold ${
+                    className={`rounded-full px-3 py-1 text-xs font-semibold ${
                       servicio.estado_activo
                         ? 'bg-green-100 text-green-800'
                         : 'bg-gray-100 text-gray-800'
@@ -274,18 +244,22 @@ export default function ServiciosAdmin() {
                   </span>
                 </td>
                 <td className="px-4 py-3">
-                  <div className="flex gap-2 justify-center">
+                  <div className="flex justify-center gap-2">
                     <button
                       onClick={() => handleEdit(servicio)}
-                      className="bg-blue-500 text-white px-3 py-1 rounded hover:bg-blue-600 transition text-xs"
+                      className="rounded bg-blue-500 px-3 py-1 text-xs text-white hover:bg-blue-600"
                     >
                       Editar
                     </button>
                     <button
-                      onClick={() => handleDelete(servicio.id)}
-                      className="bg-red-500 text-white px-3 py-1 rounded hover:bg-red-600 transition text-xs"
+                      onClick={() => handleToggleStatus(servicio)}
+                      className={`rounded px-3 py-1 text-xs text-white ${
+                        servicio.estado_activo
+                          ? 'bg-red-500 hover:bg-red-600'
+                          : 'bg-green-600 hover:bg-green-700'
+                      }`}
                     >
-                      Eliminar
+                      {servicio.estado_activo ? 'Desactivar' : 'Activar'}
                     </button>
                   </div>
                 </td>

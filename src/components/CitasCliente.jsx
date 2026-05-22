@@ -1,22 +1,78 @@
-import { useState, useEffect } from 'react';
-import { slotServices, scheduleServices, petServices, scheduleUtils } from '../api/scheduleService';
+import { useEffect, useMemo, useState } from 'react';
+import { petServices, scheduleServices, slotServices } from '../api/scheduleService';
+
+const STATUS_STYLES = {
+  en_revision: 'bg-yellow-100 text-yellow-800',
+  confirmada: 'bg-green-100 text-green-800',
+  en_proceso: 'bg-blue-100 text-blue-800',
+  finalizada: 'bg-emerald-100 text-emerald-800',
+  cancelada: 'bg-red-100 text-red-800',
+};
+
+const STATUS_LABELS = {
+  en_revision: 'En revision',
+  confirmada: 'Confirmada',
+  en_proceso: 'En proceso',
+  finalizada: 'Finalizada',
+  cancelada: 'Cancelada',
+};
+
+const parseTimeToMinutes = (value) => {
+  if (!value) return null;
+  const [hours, minutes] = String(value).slice(0, 5).split(':').map(Number);
+  if (Number.isNaN(hours) || Number.isNaN(minutes)) return null;
+  return (hours * 60) + minutes;
+};
+
+const getSlotDistance = (slot, rangeStart, rangeEnd) => {
+  const slotStart = parseTimeToMinutes(slot.hora_inicio);
+  const slotEnd = parseTimeToMinutes(slot.hora_fin);
+
+  if (slotStart === null || slotEnd === null || rangeStart === null || rangeEnd === null) {
+    return Number.MAX_SAFE_INTEGER;
+  }
+
+  if (slotEnd <= rangeStart) {
+    return rangeStart - slotEnd;
+  }
+
+  if (slotStart >= rangeEnd) {
+    return slotStart - rangeEnd;
+  }
+
+  return 0;
+};
+
+const sortByClosestRange = (slots, rangeStart, rangeEnd) => (
+  [...slots].sort((a, b) => {
+    const distanceA = getSlotDistance(a, rangeStart, rangeEnd);
+    const distanceB = getSlotDistance(b, rangeStart, rangeEnd);
+
+    if (distanceA !== distanceB) {
+      return distanceA - distanceB;
+    }
+
+    return String(a.hora_inicio).localeCompare(String(b.hora_inicio));
+  })
+);
 
 export default function CitasCliente() {
-  const [tab, setTab] = useState('disponibles'); // 'disponibles' | 'mis-citas'
+  const [tab, setTab] = useState('reservar');
   const [mascotas, setMascotas] = useState([]);
   const [servicios, setServicios] = useState([]);
   const [citas, setCitas] = useState([]);
-  const [características, setCaracterísticas] = useState([]);
   const [slotsDisponibles, setSlotsDisponibles] = useState([]);
+  const [slotSeleccionado, setSlotSeleccionado] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-
-  // Filtros para disponibles
+  const [previewData, setPreviewData] = useState(null);
+  const [cancelModal, setCancelModal] = useState({ open: false, citaId: null, motivo: 'Cambio de planes' });
   const [filtros, setFiltros] = useState({
     fecha: '',
     mascotaId: '',
     servicioId: '',
-    duracionMinutos: ''
+    horaDesde: '15:00',
+    horaHasta: '19:00',
   });
 
   useEffect(() => {
@@ -24,7 +80,7 @@ export default function CitasCliente() {
   }, []);
 
   useEffect(() => {
-    if (tab === 'mis-citas') {
+    if (tab === 'mis-citas' || tab === 'concluidos') {
       loadMisCitas();
     }
   }, [tab]);
@@ -32,23 +88,16 @@ export default function CitasCliente() {
   const loadInitialData = async () => {
     try {
       setLoading(true);
-      const [mascotasRes, serviciosRes, caracteristicasRes] = await Promise.all([
+      const [mascotasRes, serviciosRes] = await Promise.all([
         petServices.getMascotasCliente(),
         scheduleServices.getServicios(),
-        petServices.getCaracteristicas()
       ]);
 
       setMascotas(mascotasRes.data || []);
       setServicios(Array.isArray(serviciosRes.data) ? serviciosRes.data : []);
-      
-      // Manejar características que pueden venir de diferentes formas
-      const caracteristicas = Array.isArray(caracteristicasRes.data) 
-        ? caracteristicasRes.data 
-        : (caracteristicasRes.data?.caracteristicas || []);
-      setCaracterísticas(caracteristicas);
+      setError(null);
     } catch (err) {
       setError('Error al cargar datos');
-      console.error(err);
     } finally {
       setLoading(false);
     }
@@ -58,22 +107,59 @@ export default function CitasCliente() {
     try {
       setLoading(true);
       const res = await slotServices.getMisCitas();
-      setCitas(Array.isArray(res.data) ? res.data : (res.data?.citas || []));
+      setCitas(Array.isArray(res.data) ? res.data : []);
+      setError(null);
     } catch (err) {
       setError('Error al cargar citas');
-      console.error(err);
     } finally {
       setLoading(false);
     }
   };
 
-  const getAjustePorcentaje = (mascotaId) => {
-    const mascota = mascotas.find(m => m.id === mascotaId);
-    if (!mascota) return 0;
-    
-    const caracteristica = características.find(c => c.id === mascota.caracteristica_id);
-    return caracteristica?.ajuste_porcentaje || 0;
-  };
+  const servicioSeleccionado = useMemo(
+    () => servicios.find((item) => item.id === filtros.servicioId),
+    [servicios, filtros.servicioId]
+  );
+
+  const slotsSugeridos = useMemo(() => {
+    const rangeStart = parseTimeToMinutes(filtros.horaDesde);
+    const rangeEnd = parseTimeToMinutes(filtros.horaHasta);
+
+    if (rangeStart === null || rangeEnd === null || rangeStart >= rangeEnd) {
+      return slotsDisponibles;
+    }
+
+    const exactos = slotsDisponibles.filter((slot) => (
+      getSlotDistance(slot, rangeStart, rangeEnd) === 0
+    ));
+
+    if (exactos.length > 0) {
+      return sortByClosestRange(exactos, rangeStart, rangeEnd);
+    }
+
+    return sortByClosestRange(slotsDisponibles, rangeStart, rangeEnd);
+  }, [slotsDisponibles, filtros.horaDesde, filtros.horaHasta]);
+
+  const showingNearbySlots = useMemo(() => {
+    const rangeStart = parseTimeToMinutes(filtros.horaDesde);
+    const rangeEnd = parseTimeToMinutes(filtros.horaHasta);
+
+    if (rangeStart === null || rangeEnd === null || rangeStart >= rangeEnd || slotsSugeridos.length === 0) {
+      return false;
+    }
+
+    return getSlotDistance(slotsSugeridos[0], rangeStart, rangeEnd) > 0;
+  }, [slotsSugeridos, filtros.horaDesde, filtros.horaHasta]);
+
+  const citasActivas = useMemo(
+    () => citas.filter((cita) => ['en_revision', 'confirmada'].includes(cita.estado)),
+    [citas]
+  );
+
+  const citasConcluidas = useMemo(
+    () => citas.filter((cita) => ['finalizada', 'cancelada'].includes(cita.estado)),
+    [citas]
+  );
 
   const buscarSlotsDisponibles = async (e) => {
     e.preventDefault();
@@ -83,86 +169,77 @@ export default function CitasCliente() {
       return;
     }
 
+    if (!filtros.horaDesde || !filtros.horaHasta || filtros.horaDesde >= filtros.horaHasta) {
+      setError('Debes indicar un rango horario valido');
+      return;
+    }
+
     try {
       setLoading(true);
       setError(null);
+      setSlotSeleccionado('');
 
-      const servicio = servicios.find(s => s.id === filtros.servicioId);
-      const ajuste = getAjustePorcentaje(filtros.mascotaId);
-
-      // Calcular duración ajustada
-      const duracionAjustada = scheduleUtils.calcularDuracionAjustada(
-        servicio.duracion_minutos,
-        ajuste
-      );
-
-      const params = {
+      const res = await slotServices.getSlotsDisponibles({
         fecha: filtros.fecha,
-        duracion_minutos: duracionAjustada,
-      };
+        mascota_id: filtros.mascotaId,
+        servicio_id: filtros.servicioId,
+      });
 
-      const res = await slotServices.getSlotsDisponibles(params);
-      const slots = Array.isArray(res.data) ? res.data : (res.data?.slots || []);
+      const slots = Array.isArray(res.data) ? res.data : [];
       setSlotsDisponibles(slots);
-
       if (slots.length === 0) {
-        setError('No hay slots disponibles para la fecha seleccionada');
+        setError('No hay horarios disponibles para la fecha seleccionada.');
       }
     } catch (err) {
-      setError(err.response?.data?.error || 'Error al buscar slots');
-      console.error(err);
+      setError(err.response?.data?.errores?.join(', ') || err.response?.data?.error || 'Error al buscar horarios');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleReservar = async (slot) => {
-    const servicio = servicios.find(s => s.id === filtros.servicioId);
-    const ajuste = getAjustePorcentaje(filtros.mascotaId);
-    const duracionAjustada = scheduleUtils.calcularDuracionAjustada(
-      servicio.duracion_minutos,
-      ajuste
+  const handleReservar = async () => {
+    const slot = slotsSugeridos.find(
+      (item) => `${item.groomer_id}-${item.hora_inicio}` === slotSeleccionado
     );
 
-    const fechaInicio = new Date(filtros.fecha + 'T' + slot.hora_inicio);
-    const fechaFin = new Date(fechaInicio.getTime() + duracionAjustada * 60000);
+    if (!slot) {
+      setError('Debes elegir un horario disponible antes de reservar.');
+      return;
+    }
 
     try {
       setLoading(true);
-      const res = await slotServices.createCita({
+      await slotServices.createCita({
         mascota_id: filtros.mascotaId,
         servicio_id: filtros.servicioId,
         groomer_id: slot.groomer_id,
-        fecha_inicio: fechaInicio.toISOString(),
-        fecha_fin: fechaFin.toISOString()
+        fecha: filtros.fecha,
+        hora_inicio: slot.hora_inicio,
       });
 
-      const citaCreada = res.data;
-      setCitas([...citas, citaCreada]);
       setSlotsDisponibles([]);
-      setFiltros({
-        fecha: '',
-        mascotaId: '',
-        servicioId: '',
-        duracionMinutos: ''
-      });
+      setSlotSeleccionado('');
+      setFiltros({ fecha: '', mascotaId: '', servicioId: '', horaDesde: '15:00', horaHasta: '19:00' });
       setError(null);
-      alert('¡Cita reservada exitosamente!');
+      setTab('mis-citas');
+      await loadMisCitas();
     } catch (err) {
-      setError(err.response?.data?.error || 'Error al reservar cita');
+      setError(
+        err.response?.data?.errores?.join(', ')
+          || err.response?.data?.error
+          || 'Error al reservar cita'
+      );
     } finally {
       setLoading(false);
     }
   };
 
-  const handleCancelarCita = async (citaId) => {
-    if (!window.confirm('¿Deseas cancelar esta cita?')) return;
-
+  const confirmarCancelacion = async () => {
     try {
       setLoading(true);
-      await slotServices.cancelarCita(citaId, 'Cancelada por cliente');
-      setCitas(citas.map(c => c.id === citaId ? { ...c, estado: 'cancelada' } : c));
-      alert('Cita cancelada exitosamente');
+      await slotServices.cancelarCita(cancelModal.citaId, cancelModal.motivo);
+      setCancelModal({ open: false, citaId: null, motivo: 'Cambio de planes' });
+      await loadMisCitas();
     } catch (err) {
       setError(err.response?.data?.error || 'Error al cancelar cita');
     } finally {
@@ -170,221 +247,336 @@ export default function CitasCliente() {
     }
   };
 
+  const openFicha = async (citaId) => {
+    try {
+      const res = await slotServices.getCita(citaId);
+      const cita = res.data;
+      setPreviewData({
+        path: cita.ficha_grooming?.foto_antes_path || cita.ficha_grooming?.foto_despues_path || '',
+        title: `${cita.mascota_nombre} - ${cita.servicio_nombre}`,
+        cita,
+      });
+    } catch (err) {
+      setError(err.response?.data?.error || 'No se pudo cargar la ficha del servicio');
+    }
+  };
+
   const handleFiltroChange = (e) => {
     const { name, value } = e.target;
-    setFiltros(prev => ({
-      ...prev,
-      [name]: value
-    }));
+    setFiltros((prev) => ({ ...prev, [name]: value }));
   };
 
   return (
-    <div className="bg-white rounded-lg shadow p-6">
-      {/* Tabs */}
-      <div className="flex border-b mb-6">
-        <button
-          onClick={() => setTab('disponibles')}
-          className={`px-4 py-2 font-semibold border-b-2 transition ${
-            tab === 'disponibles'
-              ? 'border-blue-600 text-blue-600'
-              : 'border-transparent text-gray-500 hover:text-gray-700'
-          }`}
-        >
-          Reservar Cita
-        </button>
-        <button
-          onClick={() => setTab('mis-citas')}
-          className={`px-4 py-2 font-semibold border-b-2 transition ${
-            tab === 'mis-citas'
-              ? 'border-blue-600 text-blue-600'
-              : 'border-transparent text-gray-500 hover:text-gray-700'
-          }`}
-        >
-          Mis Citas
-        </button>
+    <div className="rounded-lg bg-white p-6 shadow">
+      <div className="mb-6 flex border-b">
+        {[
+          ['reservar', 'Solicitar Cita'],
+          ['mis-citas', 'Mis Citas'],
+          ['concluidos', 'Servicios Concluidos'],
+        ].map(([id, label]) => (
+          <button
+            key={id}
+            onClick={() => setTab(id)}
+            className={`border-b-2 px-4 py-2 font-semibold transition ${
+              tab === id
+                ? 'border-blue-600 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            {label}
+          </button>
+        ))}
       </div>
 
       {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-4">
+        <div className="mb-4 rounded border border-red-200 bg-red-50 px-4 py-3 text-red-700">
           {error}
         </div>
       )}
 
-      {tab === 'disponibles' ? (
+      {tab === 'reservar' && (
         <div>
-          <h2 className="text-2xl font-bold mb-6 text-gray-900">Reservar Cita</h2>
+          <h2 className="mb-6 text-2xl font-bold text-gray-900">Solicitar Cita</h2>
 
-          <form onSubmit={buscarSlotsDisponibles} className="bg-gray-50 p-6 rounded-lg mb-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-              {/* Mascota */}
+          <form onSubmit={buscarSlotsDisponibles} className="mb-6 rounded-lg bg-gray-50 p-6">
+            <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2">
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Mascota *
-                </label>
+                <label className="mb-2 block text-sm font-semibold text-gray-700">Mascota *</label>
                 <select
                   name="mascotaId"
                   value={filtros.mascotaId}
                   onChange={handleFiltroChange}
-                  required
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2"
                 >
                   <option value="">Seleccionar mascota...</option>
-                  {mascotas.map(mascota => (
+                  {mascotas.map((mascota) => (
                     <option key={mascota.id} value={mascota.id}>
-                      {mascota.nombre} ({mascota.tamaño})
+                      {mascota.nombre} ({mascota.tamano})
                     </option>
                   ))}
                 </select>
               </div>
 
-              {/* Servicio */}
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Servicio *
-                </label>
+                <label className="mb-2 block text-sm font-semibold text-gray-700">Servicio *</label>
                 <select
                   name="servicioId"
                   value={filtros.servicioId}
                   onChange={handleFiltroChange}
-                  required
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2"
                 >
                   <option value="">Seleccionar servicio...</option>
-                  {servicios.map(servicio => (
+                  {servicios.map((servicio) => (
                     <option key={servicio.id} value={servicio.id}>
-                      {servicio.nombre} - {scheduleUtils.formatearDuracion(servicio.duracion_minutos)} - ${servicio.precio}
+                      {servicio.nombre}
                     </option>
                   ))}
                 </select>
               </div>
 
-              {/* Fecha */}
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Fecha *
-                </label>
+                <label className="mb-2 block text-sm font-semibold text-gray-700">Fecha *</label>
                 <input
                   type="date"
                   name="fecha"
                   value={filtros.fecha}
                   onChange={handleFiltroChange}
-                  required
                   min={new Date().toISOString().split('T')[0]}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2"
+                />
+              </div>
+
+              <div>
+                <label className="mb-2 block text-sm font-semibold text-gray-700">Desde *</label>
+                <input
+                  type="time"
+                  name="horaDesde"
+                  value={filtros.horaDesde}
+                  onChange={handleFiltroChange}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2"
+                />
+              </div>
+
+              <div>
+                <label className="mb-2 block text-sm font-semibold text-gray-700">Hasta *</label>
+                <input
+                  type="time"
+                  name="horaHasta"
+                  value={filtros.horaHasta}
+                  onChange={handleFiltroChange}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2"
                 />
               </div>
             </div>
 
+            {servicioSeleccionado && (
+              <div className="mb-4 rounded-lg border border-blue-200 bg-blue-50 p-4">
+                <p className="font-semibold text-blue-900">Servicio seleccionado</p>
+                <p className="text-sm text-blue-800">{servicioSeleccionado.nombre}</p>
+                <p className="text-sm text-blue-800">Duracion: {servicioSeleccionado.duracion_minutos} min</p>
+                <p className="text-sm font-semibold text-blue-900">Precio: Bs {Number(servicioSeleccionado.precio).toFixed(2)}</p>
+              </div>
+            )}
+
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition disabled:bg-blue-400"
+              className="w-full rounded-lg bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 disabled:bg-blue-400"
             >
               {loading ? 'Buscando...' : 'Buscar Horarios'}
             </button>
           </form>
 
-          {/* Slots Disponibles */}
           {slotsDisponibles.length > 0 && (
-            <div>
-              <h3 className="text-xl font-bold mb-4 text-gray-900">Horarios Disponibles</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {slotsDisponibles.map((slot, idx) => (
-                  <div
-                    key={idx}
-                    className="border rounded-lg p-4 hover:shadow-lg transition"
-                  >
-                    <p className="text-lg font-bold text-gray-900 mb-2">
-                      {slot.hora_inicio}
-                    </p>
-                    <p className="text-sm text-gray-600 mb-4">
-                      {new Date(filtros.fecha).toLocaleDateString('es-ES', {
-                        weekday: 'long',
-                        year: 'numeric',
-                        month: 'long',
-                        day: 'numeric'
-                      })}
-                    </p>
-                    <button
-                      onClick={() => handleReservar(slot)}
-                      disabled={loading}
-                      className="w-full bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 transition disabled:bg-green-400"
-                    >
-                      Reservar
-                    </button>
-                  </div>
+            <div className="rounded-lg border p-4">
+              <h3 className="mb-4 text-lg font-bold text-gray-900">Elegir horario disponible</h3>
+              <p className="mb-4 text-sm text-gray-600">
+                {showingNearbySlots
+                  ? 'No encontramos horarios exactos en el rango solicitado. Te mostramos las opciones mas cercanas disponibles.'
+                  : 'Te mostramos los horarios disponibles dentro del rango solicitado.'}
+              </p>
+              <select
+                value={slotSeleccionado}
+                onChange={(e) => setSlotSeleccionado(e.target.value)}
+                className="mb-4 w-full rounded-lg border border-gray-300 px-3 py-2"
+              >
+                <option value="">Seleccionar horario...</option>
+                {slotsSugeridos.map((slot, idx) => (
+                  <option key={`${slot.groomer_id}-${slot.hora_inicio}-${idx}`} value={`${slot.groomer_id}-${slot.hora_inicio}`}>
+                    {slot.hora_inicio} - {slot.hora_fin} | Groomer: {slot.groomer_nombre || slot.groomer_id}
+                  </option>
                 ))}
-              </div>
+              </select>
+
+              <button
+                onClick={handleReservar}
+                disabled={loading || !slotSeleccionado}
+                className="rounded bg-green-600 px-4 py-2 text-white hover:bg-green-700 disabled:bg-green-400"
+              >
+                Reservar
+              </button>
             </div>
           )}
         </div>
-      ) : (
-        <div>
-          <h2 className="text-2xl font-bold mb-6 text-gray-900">Mis Citas</h2>
+      )}
 
+      {tab === 'mis-citas' && (
+        <div>
+          <h2 className="mb-6 text-2xl font-bold text-gray-900">Mis Citas</h2>
           {loading ? (
-            <div className="text-center py-8">Cargando citas...</div>
-          ) : citas.length === 0 ? (
-            <div className="text-center py-12 text-gray-500">
-              <p>No tienes citas reservadas</p>
-            </div>
+            <div className="py-8 text-center">Cargando citas...</div>
+          ) : citasActivas.length === 0 ? (
+            <div className="py-12 text-center text-gray-500">No tienes citas activas.</div>
           ) : (
             <div className="space-y-4">
-              {citas.map(cita => {
-                const mascotaNombre = cita.mascota_nombre || cita.mascota?.nombre || 'Mascota';
-                const servicioNombre = cita.servicio_nombre || cita.servicio?.nombre || 'Servicio';
-                const estado = cita.estado || 'pendiente';
-                
-                return (
-                  <div
-                    key={cita.id}
-                    className="border rounded-lg p-4 hover:shadow-lg transition"
-                  >
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <h3 className="font-bold text-lg text-gray-900">
-                          {mascotaNombre}
-                        </h3>
-                        <p className="text-sm text-gray-600">
-                          {servicioNombre}
-                        </p>
-                        <p className="text-sm text-gray-600 mt-2">
-                          📅 {new Date(cita.fecha_inicio).toLocaleDateString('es-ES')}
-                        </p>
-                        <p className="text-sm text-gray-600">
-                          🕐 {new Date(cita.fecha_inicio).toLocaleTimeString('es-ES', {
-                            hour: '2-digit',
-                            minute: '2-digit'
-                          })}
-                        </p>
-                      </div>
-                      <span
-                        className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                          estado === 'confirmada'
-                            ? 'bg-green-100 text-green-800'
-                            : estado === 'cancelada'
-                            ? 'bg-red-100 text-red-800'
-                            : 'bg-yellow-100 text-yellow-800'
-                        }`}
-                      >
-                        {estado}
-                      </span>
+              {citasActivas.map((cita) => (
+                <div key={cita.id} className="rounded-lg border p-4">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <h3 className="text-lg font-bold text-gray-900">{cita.mascota_nombre}</h3>
+                      <p className="text-sm text-gray-600">{cita.servicio_nombre}</p>
+                      <p className="mt-2 text-sm text-gray-600">{new Date(cita.fecha_inicio).toLocaleDateString('es-ES')}</p>
+                      <p className="text-sm text-gray-600">
+                        {new Date(cita.fecha_inicio).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
+                      </p>
                     </div>
-
-                    {estado === 'confirmada' && (
-                      <button
-                        onClick={() => handleCancelarCita(cita.id)}
-                        disabled={loading}
-                        className="mt-4 w-full bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600 transition disabled:bg-red-400"
-                      >
-                        Cancelar Cita
-                      </button>
-                    )}
+                    <span className={`rounded-full px-3 py-1 text-xs font-semibold ${STATUS_STYLES[cita.estado]}`}>
+                      {STATUS_LABELS[cita.estado]}
+                    </span>
                   </div>
-                );
-              })}
+
+                  <button
+                    onClick={() => setCancelModal({ open: true, citaId: cita.id, motivo: 'Cambio de planes' })}
+                    className="mt-4 w-full rounded bg-red-500 px-4 py-2 text-white hover:bg-red-600"
+                  >
+                    Cancelar Cita
+                  </button>
+                </div>
+              ))}
             </div>
           )}
+        </div>
+      )}
+
+      {tab === 'concluidos' && (
+        <div>
+          <h2 className="mb-6 text-2xl font-bold text-gray-900">Servicios Concluidos</h2>
+          {loading ? (
+            <div className="py-8 text-center">Cargando historial...</div>
+          ) : citasConcluidas.length === 0 ? (
+            <div className="py-12 text-center text-gray-500">No hay servicios concluidos o cancelados.</div>
+          ) : (
+            <div className="space-y-4">
+              {citasConcluidas.map((cita) => (
+                <div key={cita.id} className="rounded-lg border p-4">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <h3 className="text-lg font-bold text-gray-900">{cita.mascota_nombre}</h3>
+                      <p className="text-sm text-gray-600">{cita.servicio_nombre}</p>
+                      <p className="mt-2 text-sm text-gray-600">{new Date(cita.fecha_inicio).toLocaleDateString('es-ES')}</p>
+                    </div>
+                    <span className={`rounded-full px-3 py-1 text-xs font-semibold ${STATUS_STYLES[cita.estado]}`}>
+                      {STATUS_LABELS[cita.estado]}
+                    </span>
+                  </div>
+
+                  {cita.estado === 'finalizada' && (
+                    <button
+                      onClick={() => openFicha(cita.id)}
+                      className="mt-4 rounded bg-blue-600 px-4 py-2 text-white hover:bg-blue-700"
+                    >
+                      Ver ficha
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {cancelModal.open && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-lg rounded-xl bg-white p-6 shadow-xl">
+            <h3 className="mb-4 text-xl font-bold text-gray-900">Cancelar cita</h3>
+            <p className="mb-4 text-sm text-amber-700">
+              Solo puedes anular citas con al menos 24 horas de anticipacion.
+            </p>
+            <label className="mb-2 block text-sm font-semibold text-gray-700">Motivo de cancelacion</label>
+            <textarea
+              value={cancelModal.motivo}
+              onChange={(e) => setCancelModal((prev) => ({ ...prev, motivo: e.target.value }))}
+              rows="4"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2"
+            />
+            <div className="mt-4 flex gap-3">
+              <button
+                onClick={() => setCancelModal({ open: false, citaId: null, motivo: 'Cambio de planes' })}
+                className="flex-1 rounded bg-gray-300 px-4 py-2 text-gray-700"
+              >
+                Cerrar
+              </button>
+              <button
+                onClick={confirmarCancelacion}
+                className="flex-1 rounded bg-red-500 px-4 py-2 text-white"
+              >
+                Confirmar anulacion
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {previewData?.cita && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <div className="w-full max-w-5xl rounded-xl bg-white p-6 shadow-xl">
+            <div className="mb-4 flex items-start justify-between gap-4">
+              <div>
+                <h3 className="text-xl font-bold text-gray-900">{previewData.title}</h3>
+                <p className="text-sm text-gray-600">Recomendaciones y evidencia del servicio concluido.</p>
+              </div>
+              <button
+                onClick={() => setPreviewData(null)}
+                className="rounded bg-gray-300 px-4 py-2 text-gray-700"
+              >
+                Cerrar
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <div>
+                <p className="mb-2 text-sm font-semibold text-gray-700">Foto del antes</p>
+                {previewData.cita.ficha_grooming?.foto_antes_path ? (
+                  <img
+                    src={`http://localhost:3000${previewData.cita.ficha_grooming.foto_antes_path}`}
+                    alt="Antes"
+                    className="h-64 w-full rounded-lg object-cover"
+                  />
+                ) : (
+                  <div className="rounded-lg border border-dashed border-gray-300 p-6 text-sm text-gray-500">Sin foto del antes.</div>
+                )}
+              </div>
+              <div>
+                <p className="mb-2 text-sm font-semibold text-gray-700">Foto del despues</p>
+                {previewData.cita.ficha_grooming?.foto_despues_path ? (
+                  <img
+                    src={`http://localhost:3000${previewData.cita.ficha_grooming.foto_despues_path}`}
+                    alt="Despues"
+                    className="h-64 w-full rounded-lg object-cover"
+                  />
+                ) : (
+                  <div className="rounded-lg border border-dashed border-gray-300 p-6 text-sm text-gray-500">Sin foto del despues.</div>
+                )}
+              </div>
+            </div>
+
+            <div className="mt-4 rounded-lg border border-gray-200 p-4">
+              <p className="mb-2 text-sm font-semibold text-gray-700">Recomendaciones del groomer</p>
+              <p className="whitespace-pre-wrap text-sm text-gray-800">
+                {previewData.cita.ficha_grooming?.recomendaciones || 'Sin recomendaciones registradas.'}
+              </p>
+            </div>
+          </div>
         </div>
       )}
     </div>

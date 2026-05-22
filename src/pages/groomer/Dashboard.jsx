@@ -2,6 +2,7 @@ import Navbar from "../../components/Navbar";
 import Sidebar from "../../components/Sidebar";
 import ModalChangePassword from "../../components/ModalChangePassword";
 import { useState } from "react";
+import GroomerWorkspace from "../../components/GroomerWorkspace";
 
 export default function DashboardGroomer() {
   const [showChangePassword, setShowChangePassword] = useState(false);
@@ -17,15 +18,8 @@ export default function DashboardGroomer() {
         <Sidebar onChangePassword={() => setShowChangePassword(true)} />
 
         <main className="flex-1 p-10">
-
-          <h1
-            className="
-            text-5xl
-            font-bold
-            "
-          >
-            Groomer Dashboard
-          </h1>
+          <h1 className="mb-6 text-5xl font-bold">Groomer Dashboard</h1>
+          <GroomerWorkspace />
 
         </main>
 

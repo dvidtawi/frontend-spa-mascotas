@@ -1,19 +1,24 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
+import FilePreviewModal from './FilePreviewModal';
 
-export default function ModalPetForm({ isOpen, onClose, onSave, pet, características }) {
-  const [formData, setFormData] = useState({
-    nombre: '',
-    especie: '',
-    raza: '',
-    tamaño: '',
-    caracteristica_id: '',
-    edad: '',
-    peso: '',
-    observaciones: ''
-  });
+const EMPTY_FORM = {
+  nombre: '',
+  especie: '',
+  raza: '',
+  tamano: '',
+  fecha_nacimiento: '',
+  alergias: '',
+  temperamento: '',
+  ruta_foto_carnet: '',
+  notas: '',
+  carnet: null,
+};
 
+export default function ModalPetForm({ isOpen, onClose, onSave, pet, temperamentos = [] }) {
+  const [formData, setFormData] = useState(EMPTY_FORM);
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
+  const [showPreview, setShowPreview] = useState(false);
 
   useEffect(() => {
     if (pet) {
@@ -21,74 +26,49 @@ export default function ModalPetForm({ isOpen, onClose, onSave, pet, caracterís
         nombre: pet.nombre || '',
         especie: pet.especie || '',
         raza: pet.raza || '',
-        tamaño: pet.tamaño || '',
-        caracteristica_id: pet.caracteristica_id || '',
-        edad: pet.edad || '',
-        peso: pet.peso || '',
-        observaciones: pet.observaciones || ''
+        tamano: pet.tamano || pet['tamaño'] || '',
+        fecha_nacimiento: pet.fecha_nacimiento ? pet.fecha_nacimiento.slice(0, 10) : '',
+        alergias: pet.alergias || '',
+        temperamento: pet.temperamento || '',
+        ruta_foto_carnet: pet.ruta_foto_carnet || '',
+        notas: pet.notas || '',
+        carnet: null,
       });
     } else {
-      setFormData({
-        nombre: '',
-        especie: '',
-        raza: '',
-        tamaño: '',
-        caracteristica_id: '',
-        edad: '',
-        peso: '',
-        observaciones: ''
-      });
+      setFormData(EMPTY_FORM);
     }
+
     setErrors({});
   }, [pet, isOpen]);
 
   const handleChange = (e) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({
+    const { name, value, files } = e.target;
+    setFormData((prev) => ({
       ...prev,
-      [name]: value
+      [name]: name === 'carnet' ? files?.[0] || null : value,
     }));
+
     if (errors[name]) {
-      setErrors(prev => ({
-        ...prev,
-        [name]: ''
-      }));
+      setErrors((prev) => ({ ...prev, [name]: '' }));
     }
   };
 
   const validateForm = () => {
     const newErrors = {};
-    
     if (!formData.nombre.trim()) newErrors.nombre = 'El nombre es requerido';
     if (!formData.especie) newErrors.especie = 'La especie es requerida';
-    if (!formData.raza.trim()) newErrors.raza = 'La raza es requerida';
-    if (!formData.tamaño) newErrors.tamaño = 'El tamaño es requerido';
-    if (!formData.caracteristica_id) newErrors.caracteristica_id = 'La característica es requerida';
-    
-    if (formData.edad && isNaN(formData.edad)) newErrors.edad = 'La edad debe ser un número';
-    if (formData.peso && isNaN(formData.peso)) newErrors.peso = 'El peso debe ser un número';
-
+    if (!formData.tamano) newErrors.tamano = 'El tamano es requerido';
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
     if (!validateForm()) return;
 
     setLoading(true);
     try {
-      const submitData = {
-        ...formData,
-        edad: formData.edad ? parseInt(formData.edad) : null,
-        peso: formData.peso ? parseFloat(formData.peso) : null,
-        caracteristica_id: parseInt(formData.caracteristica_id)
-      };
-      
-      await onSave(submitData);
-    } catch (err) {
-      console.error(err);
+      await onSave(formData);
     } finally {
       setLoading(false);
     }
@@ -97,192 +77,179 @@ export default function ModalPetForm({ isOpen, onClose, onSave, pet, caracterís
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-lg p-6 max-w-md w-full mx-4">
-        <h2 className="text-2xl font-bold mb-4 text-gray-900">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+      <div className="mx-4 w-full max-w-2xl rounded-lg bg-white p-6 shadow-lg">
+        <h2 className="mb-4 text-2xl font-bold text-gray-900">
           {pet ? 'Editar Mascota' : 'Agregar Mascota'}
         </h2>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Nombre */}
+        <form onSubmit={handleSubmit} className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-1">
-              Nombre *
-            </label>
+            <label className="mb-1 block text-sm font-semibold text-gray-700">Nombre *</label>
             <input
               type="text"
               name="nombre"
               value={formData.nombre}
               onChange={handleChange}
-              className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+              className={`w-full rounded-lg border px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 ${
                 errors.nombre ? 'border-red-500' : 'border-gray-300'
               }`}
-              placeholder="Ej: Max"
             />
-            {errors.nombre && <p className="text-red-500 text-xs mt-1">{errors.nombre}</p>}
+            {errors.nombre && <p className="mt-1 text-xs text-red-500">{errors.nombre}</p>}
           </div>
 
-          {/* Especie */}
           <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-1">
-              Especie *
-            </label>
+            <label className="mb-1 block text-sm font-semibold text-gray-700">Especie *</label>
             <select
               name="especie"
               value={formData.especie}
               onChange={handleChange}
-              className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+              className={`w-full rounded-lg border px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 ${
                 errors.especie ? 'border-red-500' : 'border-gray-300'
               }`}
             >
               <option value="">Seleccionar especie...</option>
               <option value="Perro">Perro</option>
               <option value="Gato">Gato</option>
-              <option value="Conejo">Conejo</option>
               <option value="Otro">Otro</option>
             </select>
-            {errors.especie && <p className="text-red-500 text-xs mt-1">{errors.especie}</p>}
+            {errors.especie && <p className="mt-1 text-xs text-red-500">{errors.especie}</p>}
           </div>
 
-          {/* Raza */}
           <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-1">
-              Raza *
-            </label>
+            <label className="mb-1 block text-sm font-semibold text-gray-700">Raza</label>
             <input
               type="text"
               name="raza"
               value={formData.raza}
               onChange={handleChange}
-              className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                errors.raza ? 'border-red-500' : 'border-gray-300'
-              }`}
-              placeholder="Ej: Labrador"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
-            {errors.raza && <p className="text-red-500 text-xs mt-1">{errors.raza}</p>}
           </div>
 
-          {/* Tamaño */}
           <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-1">
-              Tamaño *
-            </label>
+            <label className="mb-1 block text-sm font-semibold text-gray-700">Tamano *</label>
             <select
-              name="tamaño"
-              value={formData.tamaño}
+              name="tamano"
+              value={formData.tamano}
               onChange={handleChange}
-              className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                errors.tamaño ? 'border-red-500' : 'border-gray-300'
+              className={`w-full rounded-lg border px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                errors.tamano ? 'border-red-500' : 'border-gray-300'
               }`}
             >
-              <option value="">Seleccionar tamaño...</option>
-              <option value="Pequeño">Pequeño</option>
+              <option value="">Seleccionar tamano...</option>
+              <option value="Pequeno">Pequeno</option>
               <option value="Mediano">Mediano</option>
               <option value="Grande">Grande</option>
               <option value="Gigante">Gigante</option>
             </select>
-            {errors.tamaño && <p className="text-red-500 text-xs mt-1">{errors.tamaño}</p>}
+            {errors.tamano && <p className="mt-1 text-xs text-red-500">{errors.tamano}</p>}
           </div>
 
-          {/* Característica */}
           <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-1">
-              Característica *
+            <label className="mb-1 block text-sm font-semibold text-gray-700">
+              Fecha de nacimiento
+            </label>
+            <input
+              type="date"
+              name="fecha_nacimiento"
+              value={formData.fecha_nacimiento}
+              onChange={handleChange}
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+
+          <div>
+            <label className="mb-1 block text-sm font-semibold text-gray-700">
+              Temperamento
             </label>
             <select
-              name="caracteristica_id"
-              value={formData.caracteristica_id}
+              name="temperamento"
+              value={formData.temperamento}
               onChange={handleChange}
-              className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                errors.caracteristica_id ? 'border-red-500' : 'border-gray-300'
-              }`}
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
-              <option value="">Seleccionar característica...</option>
-              {Array.isArray(características) && características.map((carac) => (
-                <option key={carac.id} value={carac.id}>
-                  {carac.nombre} ({carac.ajuste_porcentaje}%)
+              <option value="">Seleccionar temperamento...</option>
+              {temperamentos.map((item) => (
+                <option key={item.value} value={item.value}>
+                  {item.label}
                 </option>
               ))}
             </select>
-            {errors.caracteristica_id && (
-              <p className="text-red-500 text-xs mt-1">{errors.caracteristica_id}</p>
+          </div>
+
+          <div>
+            <label className="mb-1 block text-sm font-semibold text-gray-700">
+              Carnet de vacunas (PDF o imagen)
+            </label>
+            <input
+              type="file"
+              name="carnet"
+              accept=".pdf,image/*"
+              onChange={handleChange}
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            {formData.ruta_foto_carnet && (
+              <div className="mt-2 rounded-lg bg-blue-50 p-3">
+                <p className="text-sm text-blue-900">Ya existe un carnet cargado.</p>
+                <button
+                  type="button"
+                  onClick={() => setShowPreview(true)}
+                  className="mt-2 text-sm font-semibold text-blue-600 underline"
+                >
+                  Ver carnet actual
+                </button>
+              </div>
             )}
           </div>
 
-          {/* Edad */}
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-1">
-              Edad (años)
-            </label>
-            <input
-              type="number"
-              name="edad"
-              value={formData.edad}
-              onChange={handleChange}
-              className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                errors.edad ? 'border-red-500' : 'border-gray-300'
-              }`}
-              placeholder="Ej: 3"
-              min="0"
-              max="50"
-            />
-            {errors.edad && <p className="text-red-500 text-xs mt-1">{errors.edad}</p>}
-          </div>
-
-          {/* Peso */}
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-1">
-              Peso (kg)
-            </label>
-            <input
-              type="number"
-              name="peso"
-              value={formData.peso}
-              onChange={handleChange}
-              className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                errors.peso ? 'border-red-500' : 'border-gray-300'
-              }`}
-              placeholder="Ej: 25"
-              min="0"
-              step="0.1"
-            />
-            {errors.peso && <p className="text-red-500 text-xs mt-1">{errors.peso}</p>}
-          </div>
-
-          {/* Observaciones */}
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-1">
-              Observaciones
-            </label>
+          <div className="md:col-span-2">
+            <label className="mb-1 block text-sm font-semibold text-gray-700">Alergias</label>
             <textarea
-              name="observaciones"
-              value={formData.observaciones}
+              name="alergias"
+              value={formData.alergias}
               onChange={handleChange}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="Notas sobre la mascota..."
               rows="3"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
 
-          {/* Botones */}
-          <div className="flex gap-3 pt-4">
+          <div className="md:col-span-2">
+            <label className="mb-1 block text-sm font-semibold text-gray-700">Notas</label>
+            <textarea
+              name="notas"
+              value={formData.notas}
+              onChange={handleChange}
+              rows="3"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+
+          <div className="flex gap-3 pt-2 md:col-span-2">
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition"
               disabled={loading}
+              className="flex-1 rounded-lg border border-gray-300 px-4 py-2 text-gray-700 transition hover:bg-gray-50"
             >
               Cancelar
             </button>
             <button
               type="submit"
-              className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition disabled:bg-blue-400"
               disabled={loading}
+              className="flex-1 rounded-lg bg-blue-600 px-4 py-2 text-white transition hover:bg-blue-700 disabled:bg-blue-400"
             >
               {loading ? 'Guardando...' : 'Guardar'}
             </button>
           </div>
         </form>
+
+        <FilePreviewModal
+          isOpen={showPreview}
+          filePath={formData.ruta_foto_carnet}
+          title="Carnet de vacunas"
+          onClose={() => setShowPreview(false)}
+        />
       </div>
     </div>
   );
