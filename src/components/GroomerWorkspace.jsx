@@ -10,10 +10,10 @@ export default function GroomerWorkspace() {
   const [fecha, setFecha] = useState(today);
   const [agenda, setAgenda] = useState([]);
   const [selectedCita, setSelectedCita] = useState(null);
+  const [insumosAsignados, setInsumosAsignados] = useState([]);
   const [ficha, setFicha] = useState({
     estado_ingreso: '',
     observaciones_iniciales: '',
-    insumos_texto: '',
     recomendaciones: '',
     foto_antes_path: '',
     foto_despues_path: '',
@@ -62,32 +62,67 @@ export default function GroomerWorkspace() {
       setFicha({
         estado_ingreso: res.data.ficha?.estado_ingreso || '',
         observaciones_iniciales: res.data.ficha?.observaciones_iniciales || '',
-        insumos_texto: res.data.ficha?.insumos_texto || '',
         recomendaciones: res.data.ficha?.recomendaciones || '',
         foto_antes_path: res.data.ficha?.foto_antes_path || '',
         foto_despues_path: res.data.ficha?.foto_despues_path || '',
       });
+      setInsumosAsignados((res.data.insumos_servicio || []).map((item) => ({
+        id: item.id,
+        id_insumo: item.id_insumo,
+        insumo_nombre: item.insumo_nombre,
+        cantidad_entregada: Number(item.cantidad_entregada) || 0,
+        cantidad_usada: Number(item.cantidad_usada) || 0,
+        cantidad_devuelta: Number(item.cantidad_devuelta) || 0,
+        cantidad_desperdiciada: Number(item.cantidad_desperdiciada) || 0,
+        usado: Number(item.cantidad_usada) > 0,
+        merma: Number(item.cantidad_desperdiciada) || 0,
+        estado: item.estado,
+      })));
       setError(null);
     } catch (err) {
       setError(err.response?.data?.error || 'No se pudo cargar la ficha');
     }
   };
 
-  const saveFicha = async (payload = {}) => {
+  const updateInsumo = (index, field, value) => {
+    setInsumosAsignados((prev) => prev.map((item, itemIndex) => (
+      itemIndex === index
+        ? {
+            ...item,
+            [field]: field === 'usado'
+              ? Boolean(value)
+              : (Number(value) || 0),
+            ...(field === 'usado' && !value ? { merma: 0 } : {}),
+            ...(field === 'usado' && value ? { cantidad_usada: item.cantidad_entregada, cantidad_devuelta: 0 } : {}),
+            ...(field === 'usado' && !value ? { cantidad_usada: 0, cantidad_devuelta: item.cantidad_entregada } : {}),
+            ...(field === 'merma' ? {
+              cantidad_desperdiciada: Number(value) || 0,
+              cantidad_usada: Math.max(0, item.cantidad_entregada - (Number(value) || 0)),
+              cantidad_devuelta: 0,
+            } : {}),
+          }
+        : item
+    )));
+  };
+
+  const saveFicha = async (payload = {}, manageSaving = true) => {
     if (!selectedCita) return;
     try {
-      setSaving(true);
+      if (manageSaving) {
+        setSaving(true);
+      }
       await groomingServices.guardarFicha(selectedCita.id, {
         estado_ingreso: payload.estado_ingreso ?? ficha.estado_ingreso,
         observaciones_iniciales: payload.observaciones_iniciales ?? ficha.observaciones_iniciales,
-        insumos_texto: payload.insumos_texto ?? ficha.insumos_texto,
         recomendaciones: payload.recomendaciones ?? ficha.recomendaciones,
       });
       setError(null);
     } catch (err) {
       throw new Error(err.response?.data?.error || 'No se pudo guardar la ficha');
     } finally {
-      setSaving(false);
+      if (manageSaving) {
+        setSaving(false);
+      }
     }
   };
 
@@ -123,16 +158,46 @@ export default function GroomerWorkspace() {
   const finalizarServicio = async () => {
     if (!selectedCita) return;
     try {
-      await saveFicha();
-      await groomingServices.finalizarServicio(selectedCita.id);
+      setSaving(true);
+      await saveFicha({}, false);
+      await groomingServices.finalizarServicio(selectedCita.id, {
+        insumos: insumosAsignados.map((item) => ({
+          id: item.id,
+          id_insumo: item.id_insumo,
+          cantidad_entregada: item.cantidad_entregada,
+          usado: item.usado,
+          merma: item.merma,
+          cantidad_usada: item.cantidad_usada,
+          cantidad_devuelta: item.cantidad_devuelta,
+          cantidad_desperdiciada: item.cantidad_desperdiciada,
+        })),
+      });
       await loadAgenda();
     } catch (err) {
       setError(err.message || err.response?.data?.error || 'No se pudo finalizar el servicio');
+    } finally {
+      setSaving(false);
     }
   };
 
   const renderPreStartForm = () => (
     <div className="space-y-4">
+      <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
+        <p className="mb-2 text-sm font-semibold text-gray-700">Insumos asignados</p>
+        {insumosAsignados.length === 0 ? (
+          <p className="text-sm text-amber-700">Sin insumos asignados. No se puede iniciar el servicio.</p>
+        ) : (
+          <div className="space-y-2 text-sm text-gray-700">
+            {insumosAsignados.map((item) => (
+              <div key={item.id} className="rounded bg-white p-3">
+                <p className="font-semibold">{item.insumo_nombre}</p>
+                <p>Cantidad entregada: {item.cantidad_entregada}</p>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
       <div>
         <label className="mb-1 block text-sm font-semibold text-gray-700">Estado de ingreso</label>
         <textarea
@@ -173,8 +238,8 @@ export default function GroomerWorkspace() {
 
       <button
         onClick={iniciarServicio}
-        disabled={saving}
-        className="rounded-lg bg-blue-600 px-4 py-2 text-white"
+        disabled={saving || insumosAsignados.length === 0}
+        className="rounded-lg bg-blue-600 px-4 py-2 text-white disabled:opacity-60"
       >
         Iniciar servicio
       </button>
@@ -183,15 +248,45 @@ export default function GroomerWorkspace() {
 
   const renderInProgressForm = () => (
     <div className="space-y-4">
-      <div>
-        <label className="mb-1 block text-sm font-semibold text-gray-700">Registro de insumos</label>
-        <textarea
-          value={ficha.insumos_texto}
-          onChange={(e) => setFicha((prev) => ({ ...prev, insumos_texto: e.target.value }))}
-          rows="4"
-          placeholder="Shampoo x1, perfume x1, toalla x2..."
-          className="w-full rounded-lg border border-gray-300 px-3 py-2"
-        />
+      <div className="rounded-lg border border-gray-200 p-4">
+        <p className="mb-3 text-sm font-semibold text-gray-700">Insumos asignados</p>
+        {insumosAsignados.length === 0 ? (
+          <p className="text-sm text-amber-700">Todavia no hay insumos entregados para esta cita.</p>
+        ) : (
+          <div className="space-y-3">
+            {insumosAsignados.map((item, index) => (
+              <div key={item.id} className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+                <p className="mb-2 font-semibold text-gray-900">{item.insumo_nombre}</p>
+                <p className="mb-3 text-xs text-gray-500">Entregado: {item.cantidad_entregada}</p>
+                <div className="flex items-center gap-3">
+                  <label className="flex items-center gap-2 text-sm font-semibold text-gray-700">
+                    <input
+                      type="checkbox"
+                      checked={item.usado}
+                      onChange={(e) => updateInsumo(index, 'usado', e.target.checked)}
+                    />
+                    Usado
+                  </label>
+                  <div className="w-40">
+                    <label className="mb-1 block text-xs font-semibold text-gray-700">Merma</label>
+                    <input
+                      type="number"
+                      min="0"
+                      max={item.cantidad_entregada}
+                      value={item.merma}
+                      onChange={(e) => updateInsumo(index, 'merma', e.target.value)}
+                      disabled={!item.usado}
+                      className="w-full rounded-lg border border-gray-300 px-3 py-2 disabled:bg-gray-100"
+                    />
+                  </div>
+                </div>
+                <p className="mt-2 text-xs text-gray-500">
+                  Si no lo usaste, se devuelve completo. Si lo usaste, puedes registrar la merma.
+                </p>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       <div>
@@ -223,8 +318,8 @@ export default function GroomerWorkspace() {
 
       <button
         onClick={finalizarServicio}
-        disabled={saving}
-        className="rounded-lg bg-green-600 px-4 py-2 text-white"
+        disabled={saving || insumosAsignados.length === 0}
+        className="rounded-lg bg-green-600 px-4 py-2 text-white disabled:opacity-60"
       >
         Finalizar servicio
       </button>
@@ -262,8 +357,21 @@ export default function GroomerWorkspace() {
           <p className="text-sm text-gray-800 whitespace-pre-wrap">{ficha.observaciones_iniciales || 'Sin observaciones.'}</p>
         </div>
         <div className="rounded-lg border border-gray-200 p-4">
-          <p className="mb-2 text-sm font-semibold text-gray-700">Insumos usados</p>
-          <p className="text-sm text-gray-800 whitespace-pre-wrap">{ficha.insumos_texto || 'Sin registro.'}</p>
+          <p className="mb-2 text-sm font-semibold text-gray-700">Insumos procesados</p>
+          {insumosAsignados.length === 0 ? (
+            <p className="text-sm text-gray-800">Sin insumos registrados.</p>
+          ) : (
+            <div className="space-y-2 text-sm text-gray-800">
+              {insumosAsignados.map((item) => (
+                <div key={item.id} className="rounded bg-gray-50 p-3">
+                  <p className="font-semibold">{item.insumo_nombre}</p>
+                  <p>
+                    Usado: {item.cantidad_usada} | Devuelto: {item.cantidad_devuelta} | Merma: {item.cantidad_desperdiciada}
+                  </p>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
         <div className="rounded-lg border border-gray-200 p-4">
           <p className="mb-2 text-sm font-semibold text-gray-700">Recomendaciones al cliente</p>

@@ -1,54 +1,49 @@
-import { Link } from "react-router-dom";
-import { useState } from "react";
-import Navbar from "../../components/Navbar";
-import Sidebar from "../../components/Sidebar";
-import ModalChangePassword from "../../components/ModalChangePassword";
+import { Link, useNavigate } from 'react-router-dom';
+import DashboardShell from '../../components/DashboardShell';
 
 export default function DashboardAdmin() {
-  const [showChangePassword, setShowChangePassword] = useState(false);
+  const navigate = useNavigate();
+
+  const tabs = [
+    { id: 'dashboard', label: 'Inicio' },
+    { id: 'schedule', label: 'Agenda' },
+    { id: 'users', label: 'Usuarios' },
+    { id: 'audit', label: 'Auditoría' },
+  ];
+
+  const handleTabChange = (tab) => {
+    if (tab === 'schedule') navigate('/admin/schedule');
+    if (tab === 'users') navigate('/admin/users');
+    if (tab === 'audit') navigate('/admin/audit');
+  };
 
   return (
-    <div className="min-h-screen bg-gray-100">
-      <Navbar />
+    <DashboardShell title="Administrador" tabs={tabs} activeTab="dashboard" onTabChange={handleTabChange}>
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+        <Link
+          to="/admin/schedule"
+          className="block rounded-3xl border border-slate-200 bg-white p-6 shadow-sm transition hover:-translate-y-1 hover:shadow-lg"
+        >
+          <h2 className="mb-2 text-xl font-semibold text-slate-900">Agenda Operativa</h2>
+          <p className="text-slate-600">Calendario maestro, solicitudes, bloqueos y caja simulada.</p>
+        </Link>
 
-      <div className="flex">
-        <Sidebar onChangePassword={() => setShowChangePassword(true)} />
+        <Link
+          to="/admin/users"
+          className="block rounded-3xl border border-slate-200 bg-white p-6 shadow-sm transition hover:-translate-y-1 hover:shadow-lg"
+        >
+          <h2 className="mb-2 text-xl font-semibold text-slate-900">Gestión de usuarios</h2>
+          <p className="text-slate-600">Crear, editar y gestionar usuarios del sistema.</p>
+        </Link>
 
-        <main className="flex-1 p-8">
-          <h1 className="mb-6 text-4xl font-bold">Panel Administrador</h1>
-
-          <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
-            <Link
-              to="/admin/schedule"
-              className="block rounded-xl bg-white p-6 shadow transition hover:shadow-lg"
-            >
-              <h2 className="mb-2 text-xl font-semibold">Agenda Operativa</h2>
-              <p>Calendario maestro, solicitudes, bloqueos y caja simulada.</p>
-            </Link>
-
-            <Link
-              to="/admin/users"
-              className="block rounded-xl bg-white p-6 shadow transition hover:shadow-lg"
-            >
-              <h2 className="mb-2 text-xl font-semibold">Gestion Usuarios</h2>
-              <p>Crear, editar y gestionar usuarios del sistema.</p>
-            </Link>
-
-            <Link
-              to="/admin/audit"
-              className="block rounded-xl bg-white p-6 shadow transition hover:shadow-lg"
-            >
-              <h2 className="mb-2 text-xl font-semibold">Auditoria</h2>
-              <p>Ver logs de auditoria del sistema.</p>
-            </Link>
-          </div>
-        </main>
+        <Link
+          to="/admin/audit"
+          className="block rounded-3xl border border-slate-200 bg-white p-6 shadow-sm transition hover:-translate-y-1 hover:shadow-lg"
+        >
+          <h2 className="mb-2 text-xl font-semibold text-slate-900">Auditoría</h2>
+          <p className="text-slate-600">Ver logs de auditoría y trazabilidad del sistema.</p>
+        </Link>
       </div>
-
-      <ModalChangePassword
-        isOpen={showChangePassword}
-        onClose={() => setShowChangePassword(false)}
-      />
-    </div>
+    </DashboardShell>
   );
 }

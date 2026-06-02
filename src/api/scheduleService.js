@@ -36,6 +36,14 @@ const transformCita = (cita) => ({
   estado: cita.estado || 'en_revision',
 });
 
+const transformInventario = (item) => ({
+  ...item,
+  stock_actual: Number(item.stock_actual) || 0,
+  stock_minimo: Number(item.stock_minimo) || 0,
+  precio_venta: Number(item.precio_venta) || 0,
+  estado_activo: item.estado_activo !== undefined ? item.estado_activo : true,
+});
+
 export const scheduleServices = {
   getServicios: async (options = {}) => {
     const params = {};
@@ -337,6 +345,196 @@ export const groomingServices = {
 
   finalizarServicio: async (citaId, data = {}) => {
     const res = await api.put(`/schedule/groomer/citas/${citaId}/finalizar`, data);
+    return { ...res, data: res.data.data || res.data };
+  },
+};
+
+export const inventoryServices = {
+  getInventario: async (params = {}) => {
+    const res = await api.get('/inventario', { params });
+    const data = res.data.data || res.data;
+    return {
+      ...res,
+      data: Array.isArray(data) ? data.map(transformInventario) : data,
+    };
+  },
+
+  getAlertas: async () => {
+    const res = await api.get('/inventario/alertas');
+    const data = res.data.data || res.data;
+    return {
+      ...res,
+      data: Array.isArray(data) ? data.map(transformInventario) : data,
+    };
+  },
+
+  getCitasPendientesInsumos: async () => {
+    const res = await api.get('/inventario/citas-pendientes');
+    return { ...res, data: res.data.data || res.data };
+  },
+
+  createInventario: async (data) => {
+    const res = await api.post('/inventario', data);
+    return { ...res, data: transformInventario(res.data.data || res.data) };
+  },
+
+  uploadInventarioImagen: async (file) => {
+    const formData = new FormData();
+    formData.append('imagen', file);
+    const res = await api.post('/inventario/upload-image', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return { ...res, data: res.data.data || res.data };
+  },
+
+  updateInventario: async (id, data) => {
+    const res = await api.put(`/inventario/${id}`, data);
+    return { ...res, data: transformInventario(res.data.data || res.data) };
+  },
+
+  toggleInventario: async (id, estado_activo) => {
+    const res = await api.put(`/inventario/${id}/estado`, { estado_activo });
+    return { ...res, data: transformInventario(res.data.data || res.data) };
+  },
+
+  entregarInsumos: async (data) => {
+    const res = await api.post('/inventario/entregar', data);
+    return { ...res, data: res.data.data || res.data };
+  },
+
+  confirmarUso: async (data) => {
+    const res = await api.post('/inventario/confirmar-uso', data);
+    return { ...res, data: res.data.data || res.data };
+  },
+};
+
+export const shopServices = {
+  getCatalogo: async (params = {}) => {
+    const res = await api.get('/tienda/catalogo', { params });
+    const data = res.data.data || res.data;
+    return {
+      ...res,
+      data: {
+        productos: Array.isArray(data?.productos) ? data.productos : [],
+        promociones: Array.isArray(data?.promociones) ? data.promociones : [],
+      },
+    };
+  },
+
+  getPedidos: async () => {
+    const res = await api.get('/tienda/pedidos');
+    const data = res.data.data || res.data;
+    return { ...res, data: Array.isArray(data) ? data : [] };
+  },
+
+  getPromociones: async () => {
+    const res = await api.get('/tienda/promociones');
+    const data = res.data.data || res.data;
+    return { ...res, data: Array.isArray(data) ? data : [] };
+  },
+
+  getCupones: async () => {
+    const res = await api.get('/tienda/cupones');
+    const data = res.data.data || res.data;
+    return { ...res, data: Array.isArray(data) ? data : [] };
+  },
+
+  crearPedido: async (data) => {
+    const res = await api.post('/tienda/pedidos', data);
+    return { ...res, data: res.data.data || res.data };
+  },
+
+  crearVenta: async (data) => {
+    const res = await api.post('/tienda/ventas', data);
+    return { ...res, data: res.data.data || res.data };
+  },
+
+  createPromocion: async (data) => {
+    const res = await api.post('/tienda/promociones', data);
+    return { ...res, data: res.data.data || res.data };
+  },
+
+  updatePromocion: async (id, data) => {
+    const res = await api.put(`/tienda/promociones/${id}`, data);
+    return { ...res, data: res.data.data || res.data };
+  },
+
+  togglePromocion: async (id, estado_activo) => {
+    const res = await api.put(`/tienda/promociones/${id}/estado`, { estado_activo });
+    return { ...res, data: res.data.data || res.data };
+  },
+
+  createCupon: async (data) => {
+    const res = await api.post('/tienda/cupones', data);
+    return { ...res, data: res.data.data || res.data };
+  },
+
+  updateCupon: async (id, data) => {
+    const res = await api.put(`/tienda/cupones/${id}`, data);
+    return { ...res, data: res.data.data || res.data };
+  },
+
+  toggleCupon: async (id, estado_activo) => {
+    const res = await api.put(`/tienda/cupones/${id}/estado`, { estado_activo });
+    return { ...res, data: res.data.data || res.data };
+  },
+
+  validarCupon: async (data) => {
+    const res = await api.get('/tienda/cupones/validar', { params: data });
+    return { ...res, data: res.data.data || res.data };
+  },
+
+  getMensajePedido: async (pedidoId) => {
+    const res = await api.get(`/tienda/pedidos/${pedidoId}/mensaje`);
+    return { ...res, data: res.data.data || res.data };
+  },
+};
+
+export const notificationServices = {
+  getMine: async (params = {}) => {
+    const res = await api.get('/notificaciones', { params });
+    return { ...res, data: res.data.data || res.data };
+  },
+
+  countUnread: async () => {
+    const res = await api.get('/notificaciones/unread-count');
+    return { ...res, data: res.data.data || res.data };
+  },
+
+  markRead: async (id) => {
+    const res = await api.put(`/notificaciones/${id}/leida`);
+    return { ...res, data: res.data.data || res.data };
+  },
+
+  markAllRead: async () => {
+    const res = await api.put('/notificaciones/leidas');
+    return { ...res, data: res.data.data || res.data };
+  },
+};
+
+export const reportServices = {
+  getAuditoriaInsumos: async (params = {}) => {
+    const res = await api.get('/reportes/insumos/auditoria', { params });
+    return { ...res, data: res.data.data || res.data };
+  },
+
+  getProductividadGroomer: async (params = {}) => {
+    const res = await api.get('/reportes/groomer/productividad', { params });
+    return { ...res, data: res.data.data || res.data };
+  },
+
+  getHistorialGroomer: async (params = {}) => {
+    const res = await api.get('/reportes/groomer/historial', { params });
+    return { ...res, data: res.data.data || res.data };
+  },
+
+  getConsumoGroomer: async (params = {}) => {
+    const res = await api.get('/reportes/groomer/consumo', { params });
+    return { ...res, data: res.data.data || res.data };
+  },
+
+  getBeneficiosCliente: async (params = {}) => {
+    const res = await api.get('/reportes/cliente/beneficios', { params });
     return { ...res, data: res.data.data || res.data };
   },
 };

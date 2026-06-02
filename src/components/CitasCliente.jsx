@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { jsPDF } from 'jspdf';
 import { petServices, scheduleServices, slotServices } from '../api/scheduleService';
 
 const STATUS_STYLES = {
@@ -55,6 +56,38 @@ const sortByClosestRange = (slots, rangeStart, rangeEnd) => (
     return String(a.hora_inicio).localeCompare(String(b.hora_inicio));
   })
 );
+
+const formatMoney = (value) => `Bs ${Number(value || 0).toFixed(2)}`;
+
+const downloadServiceInvoicePdf = (cita) => {
+  const doc = new jsPDF();
+  const marginLeft = 14;
+  let y = 18;
+
+  const write = (text, size = 11, bold = false, gap = 7) => {
+    doc.setFont('helvetica', bold ? 'bold' : 'normal');
+    doc.setFontSize(size);
+    const lines = doc.splitTextToSize(String(text || ''), 180);
+    doc.text(lines, marginLeft, y);
+    y += lines.length * gap;
+  };
+
+  write('Factura PetSpa Mascotas', 18, true, 10);
+  write(`Cliente: ${cita.cliente_nombre || 'Cliente'}`, 11, true);
+  write(`Mascota: ${cita.mascota_nombre || '-'}`, 11);
+  write(`Servicio: ${cita.servicio_nombre || '-'}`, 11);
+  write(`Groomer: ${cita.groomer_nombre || '-'}`, 11);
+  write(`Fecha: ${new Date(cita.fecha_inicio || cita.fecha).toLocaleString('es-BO')}`, 11, false, 8);
+  write(`Estado: ${String(cita.estado || '').toUpperCase()}`, 11, false, 8);
+  write(`Precio del servicio: ${formatMoney(cita.precio_final)}`, 12, true, 8);
+
+  if (cita.ficha_grooming?.recomendaciones) {
+    write('Recomendaciones', 12, true, 8);
+    write(cita.ficha_grooming.recomendaciones, 10, false, 6);
+  }
+
+  doc.save(`factura-servicio-${String(cita.id).slice(0, 8)}.pdf`);
+};
 
 export default function CitasCliente() {
   const [tab, setTab] = useState('reservar');
@@ -567,6 +600,38 @@ export default function CitasCliente() {
                 ) : (
                   <div className="rounded-lg border border-dashed border-gray-300 p-6 text-sm text-gray-500">Sin foto del despues.</div>
                 )}
+              </div>
+            </div>
+
+            <div className="mt-4 rounded-lg border border-gray-200 p-4">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <p className="text-sm font-semibold text-gray-700">Factura del servicio</p>
+                {previewData.cita.estado === 'finalizada' && (
+                  <button
+                    onClick={() => downloadServiceInvoicePdf(previewData.cita)}
+                    className="rounded bg-blue-600 px-3 py-2 text-sm font-semibold text-white"
+                  >
+                    Descargar PDF
+                  </button>
+                )}
+              </div>
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                <div className="rounded-lg bg-gray-50 p-3 text-sm text-gray-800">
+                  <p className="font-semibold">Cliente</p>
+                  <p>{previewData.cita.cliente_nombre || 'Cliente'}</p>
+                </div>
+                <div className="rounded-lg bg-gray-50 p-3 text-sm text-gray-800">
+                  <p className="font-semibold">Mascota</p>
+                  <p>{previewData.cita.mascota_nombre || '-'}</p>
+                </div>
+                <div className="rounded-lg bg-gray-50 p-3 text-sm text-gray-800">
+                  <p className="font-semibold">Servicio</p>
+                  <p>{previewData.cita.servicio_nombre || '-'}</p>
+                </div>
+                <div className="rounded-lg bg-gray-50 p-3 text-sm text-gray-800">
+                  <p className="font-semibold">Total</p>
+                  <p>{formatMoney(previewData.cita.precio_final)}</p>
+                </div>
               </div>
             </div>
 

@@ -1,181 +1,87 @@
-import { Link, useNavigate } from "react-router-dom";
-import { useAuth } from "../auth/AuthContext";
-import toast from "react-hot-toast";
+import { Link } from 'react-router-dom';
+import { useAuth } from '../auth/AuthContext';
+import NotificationBell from './NotificationBell';
+import { FiMenu } from 'react-icons/fi';
 
-export default function Navbar() {
+export default function Navbar({
+  title,
+  tabs = [],
+  activeTab = '',
+  onTabChange,
+  onMenuToggle,
+}) {
+  const { user } = useAuth();
 
-  const { user, logout } = useAuth();
-  const navigate = useNavigate();
-
-  const handleLogout = async () => {
-    const confirmed = window.confirm(
-      "¿Estás seguro de cerrar sesión?"
-    );
-    if (!confirmed) return;
-
-    try {
-      await logout();
-      navigate("/");
-    } catch (err) {
-      console.error(err);
-      toast.error("No se pudo cerrar sesión");
-    }
-  };
+  const resolvedTitle = title || (
+    user?.rol === 1 ? 'Administrador'
+      : user?.rol === 2 ? 'Groomer'
+        : user?.rol === 3 ? 'Recepcionista'
+          : user?.rol === 4 ? 'Cliente'
+            : 'PetSpa Mascotas'
+  );
 
   return (
-
-    <header
-      className="
-      bg-white
-      shadow-md
-      px-6
-      py-4
-      flex
-      justify-between
-      items-center
-      "
-    >
-
-      <h1
-        className="
-        text-2xl
-        font-bold
-        text-blue-600
-        "
-      >
-
-        {
-          user?.rol === 1
-            ? "Administrador"
-
-          : user?.rol === 2
-            ? "Groomer"
-
-          : user?.rol === 3
-            ? "Recepcionista"
-
-          : "PetSpa Mascotas"
-        }
-
-      </h1>
-
-      <div className="flex gap-4 items-center">
-
-        {user && (
-          <div className="flex gap-4">
-            {/* Links según rol */}
-            {user?.rol === 1 && (
-              <>
-                <Link
-                  to="/admin"
-                  className="text-gray-600 hover:text-blue-600 font-semibold"
-                >
-                  Dashboard
-                </Link>
-                <Link
-                  to="/admin/schedule"
-                  className="text-gray-600 hover:text-blue-600 font-semibold"
-                >
-                  Agenda
-                </Link>
-              </>
-            )}
-            
-            {user?.rol === 4 && (
-              <>
-                <Link
-                  to="/cliente"
-                  className="text-gray-600 hover:text-blue-600 font-semibold"
-                >
-                  Dashboard
-                </Link>
-                <Link
-                  to="/cliente/schedule"
-                  className="text-gray-600 hover:text-blue-600 font-semibold"
-                >
-                  Mis Citas
-                </Link>
-              </>
-            )}
-
-            {user?.rol === 2 && (
-              <Link
-                to="/groomer"
-                className="text-gray-600 hover:text-blue-600 font-semibold"
-              >
-                Dashboard
-              </Link>
-            )}
-
-            {user?.rol === 3 && (
-              <>
-                <Link
-                  to="/recepcion"
-                  className="text-gray-600 hover:text-blue-600 font-semibold"
-                >
-                  Dashboard
-                </Link>
-                <Link
-                  to="/admin/schedule"
-                  className="text-gray-600 hover:text-blue-600 font-semibold"
-                >
-                  Agenda
-                </Link>
-              </>
+    <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/95 backdrop-blur">
+      <div className="flex items-center justify-between gap-4 px-4 py-3 md:px-6">
+        <div className="flex items-center gap-3">
+          {user && onMenuToggle && (
+            <button
+              type="button"
+              onClick={onMenuToggle}
+              className="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 shadow-sm transition hover:bg-slate-50"
+              aria-label="Abrir o cerrar menu"
+            >
+              <FiMenu className="text-xl" />
+            </button>
+          )}
+          <div>
+            <h1 className="text-lg font-bold text-slate-900 md:text-2xl">{resolvedTitle}</h1>
+            {user && (
+              <p className="text-xs font-medium uppercase tracking-[0.2em] text-slate-500">
+                {user?.rol === 1 ? 'Panel administrativo' :
+                  user?.rol === 2 ? 'Panel grooming' :
+                    user?.rol === 3 ? 'Panel recepción' :
+                      user?.rol === 4 ? 'Panel cliente' : ''}
+              </p>
             )}
           </div>
-        )}
+        </div>
 
-        {
-          !user && (
-            <>
-              <Link
-                to="/login"
-                className="
-                bg-blue-600
-                text-white
-                px-4
-                py-2
-                rounded-lg
-                "
-              >
-                Login
+        <div className="flex items-center gap-3">
+          {user && <NotificationBell />}
+          {!user && (
+            <div className="flex items-center gap-2">
+              <Link to="/login" className="rounded-xl bg-blue-600 px-4 py-2 font-semibold text-white">
+                Iniciar sesión
               </Link>
-
-              <Link
-                to="/register"
-                className="
-                border
-                px-4
-                py-2
-                rounded-lg
-                "
-              >
-                Registro
+              <Link to="/register" className="rounded-xl border border-slate-300 px-4 py-2 font-semibold text-slate-700">
+                Registrarse
               </Link>
-            </>
-          )
-        }
-
-        {
-          user && (
-            <button
-              onClick={handleLogout}
-              className="
-              bg-red-500
-              text-white
-              px-4
-              py-2
-              rounded-lg
-              "
-            >
-              Cerrar sesión
-            </button>
-          )
-        }
-
+            </div>
+          )}
+        </div>
       </div>
 
+      {user && tabs.length > 0 && (
+        <div className="border-t border-slate-200 px-4 py-3 md:px-6">
+          <div className="flex gap-2 overflow-x-auto">
+            {tabs.map((tab) => (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => onTabChange?.(tab.id)}
+                className={`whitespace-nowrap rounded-full px-4 py-2 text-sm font-semibold transition ${
+                  activeTab === tab.id
+                    ? 'bg-slate-900 text-white shadow'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
     </header>
   );
 }

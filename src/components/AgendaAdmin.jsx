@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
+  inventoryServices,
   groomerAvailabilityServices,
   petServices,
   scheduleServices,
@@ -36,6 +37,9 @@ export default function AgendaAdmin() {
   const [showEdit, setShowEdit] = useState(false);
   const [editingCita, setEditingCita] = useState(null);
   const [selectedFicha, setSelectedFicha] = useState(null);
+  const [deliveryModal, setDeliveryModal] = useState({ open: false, cita: null });
+  const [inventarioItems, setInventarioItems] = useState([]);
+  const [deliveryItems, setDeliveryItems] = useState([]);
   const [formData, setFormData] = useState({
     cliente_id: '',
     mascota_id: '',
@@ -187,6 +191,64 @@ export default function AgendaAdmin() {
       setError(null);
     } catch (err) {
       setError(err.response?.data?.error || 'No se pudo cargar la ficha del servicio');
+    }
+  };
+
+  const openDeliveryModal = async (cita) => {
+    try {
+      const [inventarioRes, fichaRes] = await Promise.all([
+        inventoryServices.getInventario({ include_inactive: false }),
+        slotServices.getCita(cita.id),
+      ]);
+
+      setInventarioItems(Array.isArray(inventarioRes.data) ? inventarioRes.data : []);
+      setDeliveryItems(
+        (fichaRes.data.insumos_servicio || []).map((item) => ({
+          id_insumo: item.id_insumo,
+          insumo_nombre: item.insumo_nombre,
+          cantidad_entregada: Number(item.cantidad_entregada) || 1,
+        }))
+      );
+      if ((fichaRes.data.insumos_servicio || []).length === 0) {
+        setDeliveryItems([{ id_insumo: '', cantidad_entregada: 1 }]);
+      }
+      setDeliveryModal({ open: true, cita: fichaRes.data });
+      setError(null);
+    } catch (err) {
+      setError(err.response?.data?.error || 'No se pudo abrir la entrega de insumos');
+    }
+  };
+
+  const updateDeliveryItem = (index, field, value) => {
+    setDeliveryItems((prev) => prev.map((item, itemIndex) => (
+      itemIndex === index
+        ? { ...item, [field]: field === 'id_insumo' ? value : Number(value) || 0 }
+        : item
+    )));
+  };
+
+  const addDeliveryRow = () => {
+    setDeliveryItems((prev) => ([...prev, { id_insumo: '', cantidad_entregada: 1 }]));
+  };
+
+  const removeDeliveryRow = (index) => {
+    setDeliveryItems((prev) => prev.filter((_, itemIndex) => itemIndex !== index));
+  };
+
+  const submitDelivery = async () => {
+    try {
+      setLoading(true);
+      await inventoryServices.entregarInsumos({
+        cita_id: deliveryModal.cita.id,
+        items: deliveryItems.filter((item) => item.id_insumo && Number(item.cantidad_entregada) > 0),
+      });
+      setDeliveryModal({ open: false, cita: null });
+      setDeliveryItems([]);
+      await loadAgenda();
+    } catch (err) {
+      setError(err.response?.data?.error || 'No se pudieron entregar los insumos');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -623,18 +685,106 @@ export default function AgendaAdmin() {
               </div>
 
               <div className="rounded-lg border border-gray-200 p-4">
-                <p className="mb-2 text-sm font-semibold text-gray-700">Insumos utilizados</p>
-                <p className="whitespace-pre-wrap text-sm text-gray-800">
-                  {selectedFicha.ficha_grooming?.insumos_texto || 'Sin insumos registrados.'}
-                </p>
-              </div>
-
-              <div className="rounded-lg border border-gray-200 p-4">
                 <p className="mb-2 text-sm font-semibold text-gray-700">Recomendaciones</p>
                 <p className="whitespace-pre-wrap text-sm text-gray-800">
                   {selectedFicha.ficha_grooming?.recomendaciones || 'Sin recomendaciones registradas.'}
                 </p>
               </div>
+            </div>
+
+            <div className="mt-4 rounded-lg border border-gray-200 p-4">
+              <p className="mb-3 text-sm font-semibold text-gray-700">Insumos del servicio</p>
+              {(selectedFicha.insumos_servicio || []).length === 0 ? (
+                <p className="text-sm text-gray-500">No hay insumos registrados para esta cita.</p>
+              ) : (
+                <div className="space-y-2">
+                  {selectedFicha.insumos_servicio.map((item) => (
+                    <div key={item.id} className="rounded bg-gray-50 p-3 text-sm text-gray-800">
+                      <p className="font-semibold">{item.insumo_nombre}</p>
+                      <p>Entregado: {item.cantidad_entregada} | Usado: {item.cantidad_usada} | Devuelto: {item.cantidad_devuelta} | Merma: {item.cantidad_desperdiciada}</p>
+                      <p className="text-xs text-gray-500">Estado: {item.estado}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {deliveryModal.open && deliveryModal.cita && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <div className="w-full max-w-4xl rounded-xl bg-white p-6 shadow-xl">
+            <div className="mb-4 flex items-start justify-between gap-4">
+              <div>
+                <h3 className="text-xl font-bold text-gray-900">Entrega de insumos</h3>
+                <p className="text-sm text-gray-600">
+                  {deliveryModal.cita.mascota_nombre} - {deliveryModal.cita.servicio_nombre}
+                </p>
+              </div>
+              <button
+                onClick={() => setDeliveryModal({ open: false, cita: null })}
+                className="rounded bg-gray-300 px-4 py-2 text-gray-700"
+              >
+                Cerrar
+              </button>
+            </div>
+
+            <div className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
+              Selecciona los insumos a entregar y la cantidad para esta cita. El stock se descuenta de forma inmediata.
+            </div>
+
+            <div className="space-y-3">
+              {deliveryItems.map((item, index) => (
+                <div key={`${item.id_insumo || index}`} className="grid grid-cols-1 gap-3 rounded-lg border border-gray-200 bg-gray-50 p-3 md:grid-cols-[minmax(0,1fr)_160px_120px]">
+                  <select
+                    value={item.id_insumo}
+                    onChange={(e) => updateDeliveryItem(index, 'id_insumo', e.target.value)}
+                    className="rounded-lg border border-gray-300 px-3 py-2"
+                  >
+                    <option value="">Seleccionar insumo...</option>
+                    {inventarioItems.map((insumo) => (
+                      <option key={insumo.id} value={insumo.id}>
+                        {insumo.nombre} | Stock: {insumo.stock_actual}
+                      </option>
+                    ))}
+                  </select>
+
+                  <input
+                    type="number"
+                    min="1"
+                    value={item.cantidad_entregada}
+                    onChange={(e) => updateDeliveryItem(index, 'cantidad_entregada', e.target.value)}
+                    className="rounded-lg border border-gray-300 px-3 py-2"
+                    placeholder="Cantidad"
+                  />
+
+                  <button
+                    type="button"
+                    onClick={() => removeDeliveryRow(index)}
+                    className="rounded-lg bg-gray-200 px-3 py-2 text-gray-700"
+                  >
+                    Quitar
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-4 flex flex-wrap gap-3">
+              <button
+                type="button"
+                onClick={addDeliveryRow}
+                className="rounded-lg bg-slate-700 px-4 py-2 text-white"
+              >
+                Agregar insumo
+              </button>
+              <button
+                type="button"
+                onClick={submitDelivery}
+                className="rounded-lg bg-emerald-600 px-4 py-2 text-white"
+              >
+                Confirmar entrega
+              </button>
             </div>
           </div>
         </div>
