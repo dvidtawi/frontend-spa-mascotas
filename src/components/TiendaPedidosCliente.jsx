@@ -106,6 +106,35 @@ const buildOrderPdf = (order) => {
   doc.save(`factura-petspa-${String(order.id).slice(0, 8)}.pdf`);
 };
 
+const buildOrderReceiptText = (order) => {
+  const lines = [
+    'Factura PetSpa Mascotas',
+    `Cliente: ${order.cliente_nombre || 'Cliente'}`,
+    `Pedido: ${String(order.id || '').slice(0, 8)}`,
+    `Fecha: ${order.created_at ? new Date(order.created_at).toLocaleString('es-BO') : new Date().toLocaleString('es-BO')}`,
+    `Entrega: ${order.tipo_entrega === 'delivery' ? 'Delivery' : 'Retiro en tienda'}`,
+    '',
+    'Detalle de productos',
+  ];
+
+  (order.items || []).forEach((item, index) => {
+    lines.push(
+      `${index + 1}. ${item.nombre_producto} x${item.cantidad} | ${formatMoney(item.precio_unitario_snapshot || item.precio_unitario)} c/u | ${formatMoney(item.subtotal_linea)}`
+    );
+  });
+
+  lines.push('');
+  lines.push(`Subtotal: ${formatMoney(order.subtotal)}`);
+  lines.push(`Delivery: ${formatMoney(order.cargo_entrega || order.tarifa_entrega || 0)}`);
+  lines.push(`Descuento promocion: ${formatMoney(order.descuento_promocion || 0)}`);
+  lines.push(`Descuento cupon: ${formatMoney(order.descuento_cupon || 0)}`);
+  lines.push(`Descuento cliente frecuente: ${formatMoney(order.descuento_cliente_frecuente || 0)}`);
+  lines.push(`Total: ${formatMoney(order.total)}`);
+  lines.push(`Metodo de pago: ${order.metodo_pago || order.pago_metodo || order.pago?.metodo_pago || 'pendiente'}`);
+
+  return lines.join('\n');
+};
+
 export default function TiendaPedidosCliente() {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -383,7 +412,28 @@ export default function TiendaPedidosCliente() {
         tarifa_entrega: Number(deliveryFee.toFixed(2)),
       });
 
-      const order = res.data;
+      const order = {
+        ...res.data,
+        subtotal: Number(subtotalCarrito.toFixed(2)),
+        cargo_entrega: Number(deliveryFee.toFixed(2)),
+        descuento_promocion: Number(promoDiscount.toFixed(2)),
+        descuento_cupon: Number(couponDiscount.toFixed(2)),
+        descuento_cliente_frecuente: Number(loyaltyDiscount.toFixed(2)),
+        total: Number(totalCarrito.toFixed(2)),
+        metodo_pago: metodoPago,
+        pago_metodo: metodoPago,
+        cliente_nombre: res.data?.cliente_nombre || user?.nombre || 'Cliente',
+        items: Array.isArray(res.data?.items) && res.data.items.length > 0
+          ? res.data.items
+          : carrito.map((item) => ({
+              id: item.id,
+              nombre_producto: item.nombre,
+              cantidad: item.cantidad,
+              subtotal_linea: Number((Number(item.precio_venta || 0) * Number(item.cantidad || 0)).toFixed(2)),
+              precio_unitario_snapshot: Number(item.precio_venta || 0),
+            })),
+      };
+      order.factura = buildOrderReceiptText(order);
       setGenerado(order);
       setPedidos((prev) => [order, ...prev]);
       setCarrito([]);
@@ -1052,7 +1102,7 @@ export default function TiendaPedidosCliente() {
               La factura ya fue generada y el pedido quedo registrado en caja.
             </p>
             <div className="mt-4 rounded-xl border border-gray-200 p-4">
-              <pre className="whitespace-pre-wrap text-sm text-gray-800">{generado.factura}</pre>
+              <pre className="whitespace-pre-wrap text-sm text-gray-800">{buildOrderReceiptText(generado)}</pre>
             </div>
             <div className="mt-4 flex gap-3">
               <button

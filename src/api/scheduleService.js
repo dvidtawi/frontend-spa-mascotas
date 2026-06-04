@@ -480,7 +480,11 @@ export const shopServices = {
   },
 
   validarCupon: async (data) => {
-    const res = await api.get('/tienda/cupones/validar', { params: data });
+    const payload = {
+      ...data,
+      items_json: Array.isArray(data?.items) ? JSON.stringify(data.items) : data?.items_json || null,
+    };
+    const res = await api.get('/tienda/cupones/validar', { params: payload });
     return { ...res, data: res.data.data || res.data };
   },
 
